@@ -2,17 +2,20 @@ import socket
 import threading
 import json
 from tk_gui import ChatGUI
+from shared.models import User, Message
+from typing import Optional
 
 
 class Client:
-    def __init__(self, tcpclient=None, account=None, gui=None):
+    def __init__(self, tcpclient=None, account=None, gui=None, host='127.0.0.1', port=13570):
         self.tcpclient = TCPClient(host, port)
+        self.current_user: Optional[User] = None
         self.account = None
         self.gui = ChatGUI()
 
         # 设置GUI的消息回调
-        self.tcpclient.set_message_callback(self.gui.on_message_received)
         self.gui.set_send_callback(self.tcpclient.send_message)
+        self.gui.set_receive_callback(self.tcpclient.receive_message)
 
         # 连接服务器
         self.tcpclient.connect()
@@ -30,15 +33,11 @@ class Account:
 # }
 
 class TCPClient:
-    def __init__(self, host='127.0.0.1', port=13579):
+    def __init__(self, host='127.0.0.1', port=13570):
         self.host = host
         self.port = port
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.message_callback = None
 
-    def set_message_callback(self, callback):
-        """设置接收消息的回调函数"""
-        self.message_callback = callback
 
     def send_message(self, message):
         """发送单条消息的方法"""
@@ -60,17 +59,24 @@ class TCPClient:
         except Exception as e:
             print(f"Connection failed: {str(e)}")
 
+    def receive_message(self):
+        """接收单条消息的方法"""
+        try:
+            message = self.client_socket.recv(1024).decode('utf-8')
+            return message
+        except Exception as e:
+            print(f"Error receiving message: {str(e)}")
+            return None
+
     def receive_messages(self):
+        """持续接收消息的循环方法"""
         while True:
             try:
-                message = self.client_socket.recv(1024).decode('utf-8')
+                message = self.receive_message()
                 if not message:
                     break
-                # 使用回调函数处理消息
-                if self.message_callback:
-                    self.message_callback(message)
             except Exception as e:
-                print(f"Error receiving message: {str(e)}")
+                print(f"Error in receive loop: {str(e)}")
                 break
 
         self.client_socket.close()

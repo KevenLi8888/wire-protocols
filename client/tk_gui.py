@@ -8,23 +8,20 @@ class ChatGUI:
         self.root = tk.Tk()
         self.root.title("Chat Application")
         self.send_callback = None
-        self.create_login_window()
+        self.receive_callback = None  # 添加接收消息的回调
+        self.create_chat_window()
 
     def set_send_callback(self, callback):
         """设置发送消息的回调函数"""
         self.send_callback = callback
 
-    def send_message(self):
-        message = self.message_entry.get()
-        if message and self.send_callback:
-            # 使用回调函数发送消息，而不是直接访问client
-            self.send_callback(message)
-            self.message_entry.delete(0, tk.END)
+    def set_receive_callback(self, callback):
+        """设置接收消息的回调函数"""
+        self.receive_callback = callback
 
-    def on_message_received(self, message):
-        """接收消息的回调方法"""
-        self.message_area.insert(tk.END, f"{message}\n")
-        self.message_area.see(tk.END)
+    def send_message(self, message):
+        if message and self.send_callback:
+            self.send_callback(message)
 
     def create_login_window(self):
         # 登录窗口
@@ -47,30 +44,58 @@ class ChatGUI:
         self.chat_frame = ttk.Frame(self.root, padding="10")
         self.chat_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # 消息显示区域
-        self.message_area = ScrolledText(self.chat_frame, wrap=tk.WORD, width=50, height=20)
-        self.message_area.grid(row=0, column=0, columnspan=2, padx=5, pady=5)
+        # 创建用户列表的滚动条框架
+        user_frame = ttk.Frame(self.chat_frame)
+        user_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.N, tk.S))
+        
+        self.user_listbox = tk.Listbox(user_frame, width=15, height=20)
+        user_scrollbar = ttk.Scrollbar(user_frame, orient=tk.VERTICAL, command=self.user_listbox.yview)
+        self.user_listbox.configure(yscrollcommand=user_scrollbar.set)
+        
+        self.user_listbox.pack(side=tk.LEFT, fill=tk.Y)
+        user_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # 用户列表
-        self.user_listbox = tk.Listbox(self.chat_frame, width=20, height=20)
-        self.user_listbox.grid(row=0, column=2, padx=5, pady=5)
+        # 消息显示区域（设置为只读）
+        self.message_area = ScrolledText(self.chat_frame, wrap=tk.WORD, width=60, height=20, state='disabled')
+        self.message_area.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # 消息输入区域
-        self.message_entry = ttk.Entry(self.chat_frame, width=40)
-        self.message_entry.grid(row=1, column=0, padx=5, pady=5)
+        self.message_entry = ttk.Entry(self.chat_frame, width=50)
+        self.message_entry.grid(row=1, column=1, padx=5, pady=5)
 
         # 发送按钮
         self.send_button = ttk.Button(self.chat_frame, text="Send", command=self.send_message)
-        self.send_button.grid(row=1, column=1, padx=5, pady=5)
+        self.send_button.grid(row=1, column=2, padx=5, pady=5)
+
+        # 配置列的权重，使聊天区域能够自适应扩展
+        self.chat_frame.columnconfigure(1, weight=1)
+
+    def append_message(self, message):
+        """添加消息到显示区域"""
+        self.message_area.configure(state='normal')  # 临时启用编辑
+        self.message_area.insert(tk.END, message + '\n')
+        self.message_area.configure(state='disabled')  # 恢复只读状态
+        self.message_area.see(tk.END)  # 滚动到最新消息
 
     def login(self):
-        # TODO: 实现登录逻辑
         username = self.username_entry.get()
         password = self.password_entry.get()
-        # 连接服务器并验证
-        self.client.connect()
-        self.create_chat_window()
-        self.login_frame.destroy()
+        
+        login_data = {
+            "type": "login",
+            "username": username,
+            "password": password
+        }
+            
+        self.send_callback(json.dumps(login_data))
+
+        response = json.loads(self.receive_callback())
+        if response['type'] == 'login_response' and response['message'] == 'Login successful':
+            print("Login successful")
+            self.create_chat_window()
+            self.login_frame.destroy()
+        else:
+            messagebox.showerror("Login Failed", response['message'])
 
     def register(self):
         # TODO: 实现注册逻辑
@@ -79,12 +104,8 @@ class ChatGUI:
     def send_message(self):
         message = self.message_entry.get()
         if message:
-            self.client.client_socket.send(message.encode('utf-8'))
-            self.message_entry.delete(0, tk.END)
 
-    def receive_message(self, message):
-        self.message_area.insert(tk.END, f"{message}\n")
-        self.message_area.see(tk.END)
+            self.message_entry.delete(0, tk.END)
 
     def run(self):
         self.root.mainloop()
