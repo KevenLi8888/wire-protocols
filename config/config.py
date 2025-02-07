@@ -10,6 +10,11 @@ class Config:
             'password': 'your_password',
             'host': 'localhost',
             'name': 'your_database'
+        },
+        'communication': {
+            'protocol': 'json',
+            'host': 'localhost',
+            'port': 12345
         }
     }
 

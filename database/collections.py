@@ -17,6 +17,10 @@ class UsersCollection:
         data = self.collection.find_one({"username": username})
         return UserDocument.from_dict(data) if data else None
 
+    def find_by_email(self, email: str) -> Optional[UserDocument]:
+        data = self.collection.find_one({"email": email})
+        return UserDocument.from_dict(data) if data else None
+
     def update_last_login(self, user_id: str) -> bool:
         result = self.collection.update_one(
             {"_id": ObjectId(user_id)},

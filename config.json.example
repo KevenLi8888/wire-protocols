@@ -4,5 +4,10 @@
         "password": "your_password",
         "host": "localhost",
         "name": "your_database"
+    },
+    "communication": {
+        "protocol_type": "json",  // or "wire"
+        "host": "127.0.0.1",
+        "port": 13570
     }
 }

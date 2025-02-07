@@ -5,9 +5,9 @@ from typing import Optional
 @dataclass
 class User:
     username: str
+    email: str
     created_at: datetime
     last_login: datetime
-    unread_count: int
     id: Optional[str] = None
     password_hash: Optional[str] = None
 
