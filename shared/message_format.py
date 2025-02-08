@@ -11,6 +11,9 @@ class MessageFormat:
     DELIMITER = b'\0'
     ESCAPE = b'\\'
     
+    def __init__(self, fields: Dict[str, MessageField]):
+        self.fields = fields
+    
     @classmethod
     def escape_bytes(cls, data: bytes) -> bytes:
         # Escape both escape char and delimiter

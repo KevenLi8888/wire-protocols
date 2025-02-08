@@ -1,18 +1,31 @@
 import socket
 import threading
 import argparse
+import logging
 from database.collections import UsersCollection
 from database.connection import DatabaseManager
 from config.config import Config
 from shared.communication import CommunicationInterface
 from shared.constants import *
-from handlers.user_handler import UserHandler
+from server.handlers.user_handler import UserHandler
+from shared.logger import setup_logger  # Updated import
 
 class TCPServer:
     def __init__(self, config_path):
+        self.logger = setup_logger('server')
         config = Config.get_instance(config_path)
-        self.host = config.get('host', '127.0.0.1')
-        self.port = config.get('port', 13570)
+        
+        # Add validation for host and port
+        self.host = config.get('host')
+        if not self.host:
+            self.host = '127.0.0.1'
+            self.logger.warning(f"No host configured, using default: {self.host}")
+            
+        self.port = config.get('port')
+        if not self.port:
+            self.port = 13570
+            self.logger.warning(f"No port configured, using default: {self.port}")
+        
         self.protocol_type = config.get('protocol_type', 'json')
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
@@ -25,16 +38,20 @@ class TCPServer:
 
     def start(self):
         if DatabaseManager.get_instance().db is None:
-            print("Failed to connect to database. Server shutting down.")
+            self.logger.error("Failed to connect to database. Server shutting down.")
             return
 
-        self.server_socket.bind((self.host, self.port))
-        self.server_socket.listen(5)
-        print(f"Server started successfully, listening on {self.host}:{self.port}")
+        try:
+            self.server_socket.bind((self.host, self.port))
+            self.server_socket.listen(5)
+            self.logger.info(f"Server started successfully, listening on {self.host}:{self.port}")
+        except Exception as e:
+            self.logger.error(f"Failed to bind server socket: {str(e)}")
+            raise
 
         while True:
             client_socket, client_address = self.server_socket.accept()
-            print(f"New client connected: {client_address}")
+            self.logger.info(f"New client connected: {client_address}")
             self.clients.append(client_socket)
             client_thread = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
             client_thread.start()
@@ -43,18 +60,18 @@ class TCPServer:
         while True:
             try:
                 data, message_type = self.communication.receive(client_socket)
-                print(f"Received message from {client_address}: {data}")
+                # self.logger.debug(f"Received message from {client_address}: {data}")
                 
                 response = self.handle_message(message_type, data, client_socket)
-                print(f"Sent response to {client_address}: {response}")
+                # self.logger.debug(f"Sent response to {client_address}: {response}")
 
             except Exception as e:
-                print(f"Client {client_address} error: {str(e)}")
+                self.logger.error(f"Client {client_address} error: {str(e)}")
                 break
 
         self.clients.remove(client_socket)
         client_socket.close()
-        print(f"Client {client_address} disconnected")
+        self.logger.info(f"Client {client_address} disconnected")
 
     def handle_message(self, message_type, data, client_socket):
         if message_type not in self.message_handlers:
@@ -65,10 +82,16 @@ class TCPServer:
         self.communication.send(response_type, response, client_socket)
         return response
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Start the TCP server')
-    parser.add_argument('--config', type=str, default='./config.json', help='Path to config file')
-    
-    args = parser.parse_args()
-    server = TCPServer(config_path=args.config)
-    server.start()
+    def main(self):
+        """Main function to start the server"""
+        if DatabaseManager.get_instance().db is None:
+            self.logger.error("Failed to connect to database. Server shutting down.")
+            return
+        try:
+            self.start()
+        except KeyboardInterrupt:
+            self.logger.info("Server shutting down...")
+        except Exception as e:
+            self.logger.error(f"Server error: {str(e)}", exc_info=True)
+        finally:
+            self.server_socket.close()

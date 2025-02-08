@@ -11,10 +11,12 @@ class DatabaseManager:
 
     def __init__(self):
         config = Config.get_instance()
-        self.username = config.get('database', 'username')
-        self.password = quote_plus(config.get('database', 'password'))
-        self.host = config.get('database', 'host')
-        self.database_name = config.get('database', 'name')
+        # Now using the new config access pattern
+        db_config = config.get('database')
+        self.username = quote_plus(db_config.username)
+        self.password = quote_plus(db_config.password)
+        self.host = db_config.host
+        self.database_name = db_config.name
         self._db: Optional[Database] = None
 
     @classmethod
@@ -30,7 +32,7 @@ class DatabaseManager:
         return self._db
 
     def _get_connection_string(self):
-        return f"mongodb+srv://{self.username}:{self.password}@{self.host}/?retryWrites=true&w=majority&appName={self.database_name}"
+        return f"mongodb+srv://{self.username}:{self.password}@{self.host}/?retryWrites=true&w=majority&appName=wireprotocols"
 
     def _connect(self) -> Optional[Database]:
         try:

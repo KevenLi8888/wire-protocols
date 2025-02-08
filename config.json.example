@@ -9,5 +9,6 @@
         "protocol_type": "json",  // or "wire"
         "host": "127.0.0.1",
         "port": 13570
-    }
+    },
+    "env": "production"  // "production" or "debug"
 }
