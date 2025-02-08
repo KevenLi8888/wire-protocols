@@ -4,6 +4,24 @@ from typing import Dict, Any
 
 @dataclass
 class MessageField:
+    """Message field definition with format specifiers.
+    
+    Common format_char values (from struct module):
+    'c' - char (1 byte)
+    's' - string (bytes)
+    'b' - signed char (1 byte)
+    'B' - unsigned char (1 byte)
+    'h' - short (2 bytes)
+    'H' - unsigned short (2 bytes)
+    'i' - int (4 bytes) 
+    'I' - unsigned int (4 bytes)
+    'l' - long (4 bytes)
+    'L' - unsigned long (4 bytes)
+    'q' - long long (8 bytes)
+    'Q' - unsigned long long (8 bytes)
+    'f' - float (4 bytes)
+    'd' - double (8 bytes)
+    """
     name: str
     format_char: str
 
@@ -90,7 +108,7 @@ LOGIN_REQUEST = MessageFormat({
 })
 
 RESPONSE_FORMAT = MessageFormat({
-    'code': MessageField('code', 'I'),
+    'code': MessageField('code', 'i'),
     'message': MessageField('message', 's')
 })
 

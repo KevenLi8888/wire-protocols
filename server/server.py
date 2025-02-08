@@ -23,7 +23,7 @@ class TCPServer:
                 self.port = config.get('communication', 'port')
                 self.protocol_type = config.get('communication', 'protocol_type')
             except ValueError as e:
-                self.logger.error(f"Configuration error: {str(e)}")
+                self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
                 raise RuntimeError("Server configuration is invalid") from e
                 
             if not self.host:
@@ -48,7 +48,7 @@ class TCPServer:
 
     def start(self):
         if DatabaseManager.get_instance().db is None:
-            self.logger.error("Failed to connect to database. Server shutting down.")
+            self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
 
         try:
@@ -56,7 +56,7 @@ class TCPServer:
             self.server_socket.listen(5)
             self.logger.info(f"Server started successfully, listening on {self.host}:{self.port}")
         except Exception as e:
-            self.logger.error(f"Failed to bind server socket: {str(e)}")
+            self.logger.error(f"Failed to bind server socket: {str(e)}", exc_info=True)
             raise
 
         while True:
@@ -70,29 +70,40 @@ class TCPServer:
         while True:
             try:
                 data, message_type = self.communication.receive(client_socket)
+                # Check for empty data which indicates client disconnected
+                if not data:
+                    self.logger.info(f"Client {client_address} disconnected (connection closed by client)")
+                    break
                 response = self.handle_message(message_type, data, client_socket)
-            except ConnectionError as e:
-                self.logger.info(f"Client {client_address} connection error: {str(e)}")
+            except (ConnectionError, socket.error) as e:
+                self.logger.info(f"Client {client_address} disconnected: {str(e)}")
                 break
             except Exception as e:
-                self.logger.error(f"Error processing message from {client_address}: {str(e)}")
-                # Send error response to client
-                error_response = {"code": ERROR_SERVER_ERROR, "message": "Internal server error"}
+                self.logger.error(f"Error processing message from {client_address}: {str(e)}", exc_info=True)
                 try:
-                    self.communication.send(ERROR_RESPONSE_TYPE, error_response, client_socket)
-                except Exception as send_error:
-                    self.logger.error(f"Failed to send error response to {client_address}: {str(send_error)}")
+                    error_response = {"code": ERROR_SERVER_ERROR, "message": MSG_ERROR_RESPONSE}
+                    self.communication.send(MSG_ERROR_RESPONSE, error_response, client_socket)
+                except (ConnectionError, socket.error):
+                    self.logger.info(f"Failed to send error response to {client_address} - client likely disconnected")
+                    break
+                except Exception as e:
+                    self.logger.error(f"Error sending error response to {client_address}: {str(e)}", exc_info=True)
                     break
                 continue
 
-        self.clients.remove(client_socket)
-        client_socket.close()
-        self.logger.info(f"Client {client_address} disconnected")
+        # Cleanup code moved outside the try-except block
+        if client_socket in self.clients:
+            self.clients.remove(client_socket)
+        try:
+            client_socket.close()
+        except:
+            pass  # Socket might already be closed
+        self.logger.info(f"Client {client_address} connection cleaned up")
 
     def handle_message(self, message_type, data, client_socket):
         if message_type not in self.message_handlers:
             response = {"code": ERROR_INVALID_MESSAGE, "message": MESSAGE_INVALID_MESSAGE}
-            self.communication.send(ERROR_RESPONSE_TYPE, response, client_socket)
+            self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
         
         try:
@@ -101,21 +112,21 @@ class TCPServer:
             self.communication.send(response_type, response, client_socket)
             return response
         except Exception as e:
-            self.logger.error(f"Error in message handler: {str(e)}")
-            response = {"code": ERROR_SERVER_ERROR, "message": "Error processing request"}
-            self.communication.send(ERROR_RESPONSE_TYPE, response, client_socket)
+            self.logger.error(f"Error in message handler: {str(e)}", exc_info=True)
+            response = {"code": ERROR_SERVER_ERROR, "message": MESSAGE_SERVER_ERROR}
+            self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
 
     def main(self):
         """Main function to start the server"""
         if DatabaseManager.get_instance().db is None:
-            self.logger.error("Failed to connect to database. Server shutting down.")
+            self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
         try:
             self.start()
         except KeyboardInterrupt:
             self.logger.info("Server shutting down...")
         except Exception as e:
-            self.logger.error(f"Server error: {str(e)}")
+            self.logger.error(f"Server error: {str(e)}", exc_info=True)
         finally:
             self.server_socket.close()

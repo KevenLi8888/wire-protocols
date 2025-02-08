@@ -2,6 +2,9 @@
 config-dev.json
 config.json
 
+# Logs
+*.logs
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

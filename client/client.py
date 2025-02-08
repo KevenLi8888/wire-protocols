@@ -25,7 +25,7 @@ class Client:
                 self.port = config.get('communication', 'port')
                 self.protocol_type = config.get('communication', 'protocol_type')
             except ValueError as e:
-                self.logger.error(f"Configuration error: {str(e)}")
+                self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
                 raise RuntimeError("Client configuration is invalid") from e
             
             if not self.host:
@@ -62,14 +62,14 @@ class Client:
             receive_thread.start()
             return True
         except Exception as e:
-            self.logger.error(f"Connection failed: {str(e)}")
+            self.logger.error(f"Connection failed: {str(e)}", exc_info=True)
             return False
 
     def send_message(self, message_type: int, data: Dict[str, Any]):
         try:
             self.communication.send(message_type, data, self.client_socket)
         except Exception as e:
-            self.logger.error(f"Error sending message: {str(e)}")
+            self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
 
     def receive_messages(self):
         while True:
@@ -77,7 +77,7 @@ class Client:
                 data, message_type = self.communication.receive(self.client_socket)
                 self.message_handler.handle_message(message_type, data)
             except Exception as e:
-                self.logger.error(f"Error in receive loop: {str(e)}")
+                self.logger.error(f"Error in receive loop: {str(e)}", exc_info=True)
                 break
         self.client_socket.close()
 
@@ -92,7 +92,7 @@ class Client:
         except KeyboardInterrupt:
             self.logger.info("Client shutting down...")
         except Exception as e:
-            self.logger.error(f"Client error: {str(e)}")
+            self.logger.error(f"Client error: {str(e)}", exc_info=True)
         finally:
             self.client_socket.close()
 
