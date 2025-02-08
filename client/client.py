@@ -6,24 +6,46 @@ from typing import Optional, Dict, Any
 from shared.models import User
 from shared.communication import CommunicationInterface
 from shared.constants import *
-from handlers.message_handler import MessageHandler
-from handlers.callback_handler import CallbackHandler
+from client.handlers.message_handler import MessageHandler
+from client.handlers.callback_handler import CallbackHandler
 from config.config import Config
-from tk_gui import ChatGUI
+from client.tk_gui import ChatGUI
 from shared.logger import setup_logger  # Updated import
 
 class Client:
     def __init__(self, config_path):
-        self.logger = setup_logger('client')  # Updated function name
-        config = Config.get_instance(config_path)
-        self.host = config.get('host', '127.0.0.1')
-        self.port = config.get('port', 13570)
-        self.protocol_type = config.get('protocol_type', 'json')
+        try:
+            config = Config.get_instance(config_path)
+            env = config.get('env')
+            self.logger = setup_logger('client', env)
+            
+            # Get configuration with error handling
+            try:
+                self.host = config.get('communication', 'host')
+                self.port = config.get('communication', 'port')
+                self.protocol_type = config.get('communication', 'protocol_type')
+            except ValueError as e:
+                self.logger.error(f"Configuration error: {str(e)}")
+                raise RuntimeError("Client configuration is invalid") from e
+            
+            if not self.host:
+                self.host = '127.0.0.1'
+                self.logger.warning(f"No host configured, using default: {self.host}")
+            
+            if not self.port:
+                self.port = 13570
+                self.logger.warning(f"No port configured, using default: {self.port}")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize client: {str(e)}") from e
+
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.communication = CommunicationInterface(self.protocol_type)
         self.message_handler = MessageHandler()
         self.current_user: Optional[User] = None
         self.gui = ChatGUI()
+
+        self.logger.debug("Client initialized")
         
         # Initialize callback handler
         self.callback_handler = CallbackHandler(self.send_message)

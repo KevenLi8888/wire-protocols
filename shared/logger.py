@@ -15,10 +15,7 @@ class StackTraceFormatter(logging.Formatter):
             formatted += '\n' + ''.join(traceback.format_exception(*record.exc_info))
         return formatted
 
-def setup_logger(name):
-    config = Config.get_instance()
-    env = config.get('env', 'production')
-    
+def setup_logger(name, env='debug'):
     logger = logging.getLogger(name)
     log_level = logging.DEBUG if env == 'debug' else logging.INFO
     logger.setLevel(logging.DEBUG)  # Set to lowest level to catch all logs

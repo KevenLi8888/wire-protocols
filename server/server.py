@@ -12,21 +12,31 @@ from shared.logger import setup_logger  # Updated import
 
 class TCPServer:
     def __init__(self, config_path):
-        self.logger = setup_logger('server')
-        config = Config.get_instance(config_path)
-        
-        # Add validation for host and port
-        self.host = config.get('host')
-        if not self.host:
-            self.host = '127.0.0.1'
-            self.logger.warning(f"No host configured, using default: {self.host}")
+        try:
+            config = Config.get_instance(config_path)
+            env = config.get('env')
+            self.logger = setup_logger('server', env)
             
-        self.port = config.get('port')
-        if not self.port:
-            self.port = 13570
-            self.logger.warning(f"No port configured, using default: {self.port}")
+            # Get configuration with error handling
+            try:
+                self.host = config.get('communication', 'host')
+                self.port = config.get('communication', 'port')
+                self.protocol_type = config.get('communication', 'protocol_type')
+            except ValueError as e:
+                self.logger.error(f"Configuration error: {str(e)}")
+                raise RuntimeError("Server configuration is invalid") from e
+                
+            if not self.host:
+                self.host = '127.0.0.1'
+                self.logger.warning(f"No host configured, using default: {self.host}")
+            
+            if not self.port:
+                self.port = 13570
+                self.logger.warning(f"No port configured, using default: {self.port}")
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to initialize server: {str(e)}") from e
         
-        self.protocol_type = config.get('protocol_type', 'json')
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
         self.communication = CommunicationInterface(self.protocol_type)

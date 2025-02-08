@@ -8,20 +8,22 @@ class ChatGUI:
         self.root = tk.Tk()
         self.root.title("Chat Application")
         self.send_callback = None
-        self.receive_callback = None  # 添加接收消息的回调
-        self.create_chat_window()
+        self.login_callback = None
+        self.create_account_callback = None
+        self.selected_user = None
+        self.create_login_window()
 
     def set_send_callback(self, callback):
-        """设置发送消息的回调函数"""
+        """Set callback for sending messages"""
         self.send_callback = callback
 
-    def set_receive_callback(self, callback):
-        """设置接收消息的回调函数"""
-        self.receive_callback = callback
+    def set_login_callback(self, callback):
+        """Set callback for login"""
+        self.login_callback = callback
 
-    def send_message(self, message):
-        if message and self.send_callback:
-            self.send_callback(message)
+    def set_create_account_callback(self, callback):
+        """Set callback for account creation"""
+        self.create_account_callback = callback
 
     def create_login_window(self):
         # 登录窗口
@@ -81,31 +83,75 @@ class ChatGUI:
         username = self.username_entry.get()
         password = self.password_entry.get()
         
-        login_data = {
-            "type": "login",
-            "username": username,
-            "password": password
-        }
+        if not username or not password:
+            messagebox.showerror("Error", "Please fill in all fields")
+            return
             
-        self.send_callback(json.dumps(login_data))
-
-        response = json.loads(self.receive_callback())
-        if response['type'] == 'login_response' and response['message'] == 'Login successful':
-            print("Login successful")
-            self.create_chat_window()
-            self.login_frame.destroy()
-        else:
-            messagebox.showerror("Login Failed", response['message'])
+        if self.login_callback:
+            self.login_callback(username, password)
 
     def register(self):
-        # TODO: 实现注册逻辑
-        pass
+        # Create a new registration window
+        register_window = tk.Toplevel(self.root)
+        register_window.title("Register")
+        
+        ttk.Label(register_window, text="Email:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        email_entry = ttk.Entry(register_window)
+        email_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(register_window, text="Username:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        username_entry = ttk.Entry(register_window)
+        username_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        ttk.Label(register_window, text="Password:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
+        password_entry = ttk.Entry(register_window, show="*")
+        password_entry.grid(row=2, column=1, padx=5, pady=5)
+        
+        def submit_registration():
+            email = email_entry.get()
+            username = username_entry.get()
+            password = password_entry.get()
+            
+            if not email or not username or not password:
+                messagebox.showerror("Error", "Please fill in all fields")
+                return
+                
+            if self.create_account_callback:
+                self.create_account_callback(email, username, password)
+            register_window.destroy()
+            
+        ttk.Button(register_window, text="Submit", command=submit_registration).grid(row=3, column=0, columnspan=2, pady=10)
 
     def send_message(self):
         message = self.message_entry.get()
-        if message:
-
+        selected_indices = self.user_listbox.curselection()
+        
+        if not message:
+            return
+            
+        if not selected_indices:
+            messagebox.showerror("Error", "Please select a recipient")
+            return
+            
+        recipient_id = self.user_listbox.get(selected_indices[0])
+        
+        if self.send_callback:
+            self.send_callback(message, recipient_id)
             self.message_entry.delete(0, tk.END)
+
+    def update_user_list(self, users):
+        """Update the list of available users"""
+        self.user_listbox.delete(0, tk.END)
+        for user in users:
+            self.user_listbox.insert(tk.END, user)
+
+    def show_error(self, message):
+        """Display error message"""
+        messagebox.showerror("Error", message)
+
+    def show_success(self, message):
+        """Display success message"""
+        messagebox.showinfo("Success", message)
 
     def run(self):
         self.root.mainloop()
