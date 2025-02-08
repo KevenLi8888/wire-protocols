@@ -10,9 +10,14 @@ class StackTraceFormatter(logging.Formatter):
     
     def format(self, record):
         formatted = super().format(record)
-        if record.levelno == logging.ERROR and record.exc_info:
-            # Only add traceback if exc_info is available
-            formatted += '\n' + ''.join(traceback.format_exception(*record.exc_info))
+        if record.levelno == logging.ERROR:
+            if record.exc_info:
+                # If there's an exception, use its traceback
+                formatted += '\n' + ''.join(traceback.format_exception(*record.exc_info))
+            else:
+                # For other error logs, get the current stack
+                stack = traceback.extract_stack()[:-1]  # Remove the last frame (this formatter call)
+                formatted += '\n' + ''.join(traceback.format_list(stack))
         return formatted
 
 def setup_logger(name, env='debug'):

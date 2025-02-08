@@ -30,9 +30,9 @@ class ChatGUI:
         self.login_frame = ttk.Frame(self.root, padding="10")
         self.login_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        ttk.Label(self.login_frame, text="Username:").grid(row=0, column=0, sticky=tk.W)
-        self.username_entry = ttk.Entry(self.login_frame)
-        self.username_entry.grid(row=0, column=1, padx=5, pady=5)
+        ttk.Label(self.login_frame, text="Email:").grid(row=0, column=0, sticky=tk.W)
+        self.email_entry = ttk.Entry(self.login_frame)
+        self.email_entry.grid(row=0, column=1, padx=5, pady=5)
 
         ttk.Label(self.login_frame, text="Password:").grid(row=1, column=0, sticky=tk.W)
         self.password_entry = ttk.Entry(self.login_frame, show="*")
@@ -80,15 +80,15 @@ class ChatGUI:
         self.message_area.see(tk.END)  # 滚动到最新消息
 
     def login(self):
-        username = self.username_entry.get()
+        email = self.email_entry.get()
         password = self.password_entry.get()
         
-        if not username or not password:
+        if not email or not password:
             messagebox.showerror("Error", "Please fill in all fields")
             return
             
         if self.login_callback:
-            self.login_callback(username, password)
+            self.login_callback(email, password)
 
     def register(self):
         # Create a new registration window

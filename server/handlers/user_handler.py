@@ -1,5 +1,7 @@
+from datetime import datetime
 from database.collections import UsersCollection
 from shared.constants import *
+from shared.models import User
 
 class UserHandler:
     def __init__(self):
@@ -9,8 +11,8 @@ class UserHandler:
         user = self.users.find_by_email(data['email'])
         if user:
             return {"code": ERROR_USER_EXISTS, "message": MESSAGE_USER_EXISTS}
-        # Hash password and create user
-        # ...
+        # TODO: password should be hashed
+        self.users.insert_one(User(username=data['username'], email=data['email'], password_hash=data['password'], created_at=datetime.now()))
         return {"code": SUCCESS, "message": MESSAGE_OK}
 
     def login(self, data):

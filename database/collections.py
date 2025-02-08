@@ -10,7 +10,8 @@ class UsersCollection:
         self.collection = self.db['users']
 
     def insert_one(self, user: User) -> Optional[str]:
-        result = self.collection.insert_one(user.to_dict())
+        user_dict = user.to_dict()
+        result = self.collection.insert_one(user_dict)
         return str(result.inserted_id) if result else None
 
     def find_by_username(self, username: str) -> Optional[User]:

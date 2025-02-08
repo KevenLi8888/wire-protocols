@@ -40,12 +40,10 @@ class Client:
             raise RuntimeError(f"Failed to initialize client: {str(e)}") from e
 
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.communication = CommunicationInterface(self.protocol_type)
+        self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.message_handler = MessageHandler()
         self.current_user: Optional[User] = None
         self.gui = ChatGUI()
-
-        self.logger.debug("Client initialized")
         
         # Initialize callback handler
         self.callback_handler = CallbackHandler(self.send_message)

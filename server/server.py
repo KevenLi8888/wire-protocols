@@ -39,11 +39,11 @@ class TCPServer:
         
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
-        self.communication = CommunicationInterface(self.protocol_type)
+        self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
         self.message_handlers = {
-            1: (self.user_handler.create_account, 2),  # (handler_function, response_type)
-            2: (self.user_handler.login, 3)
+            MSG_CREATE_ACCOUNT_REQUEST: (self.user_handler.create_account, MSG_CREATE_ACCOUNT_RESPONSE),  # request type -> (handler_function, response_type)
+            MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE)
         }
 
     def start(self):
@@ -70,14 +70,20 @@ class TCPServer:
         while True:
             try:
                 data, message_type = self.communication.receive(client_socket)
-                # self.logger.debug(f"Received message from {client_address}: {data}")
-                
                 response = self.handle_message(message_type, data, client_socket)
-                # self.logger.debug(f"Sent response to {client_address}: {response}")
-
-            except Exception as e:
-                self.logger.error(f"Client {client_address} error: {str(e)}")
+            except ConnectionError as e:
+                self.logger.info(f"Client {client_address} connection error: {str(e)}")
                 break
+            except Exception as e:
+                self.logger.error(f"Error processing message from {client_address}: {str(e)}")
+                # Send error response to client
+                error_response = {"code": ERROR_SERVER_ERROR, "message": "Internal server error"}
+                try:
+                    self.communication.send(ERROR_RESPONSE_TYPE, error_response, client_socket)
+                except Exception as send_error:
+                    self.logger.error(f"Failed to send error response to {client_address}: {str(send_error)}")
+                    break
+                continue
 
         self.clients.remove(client_socket)
         client_socket.close()
@@ -85,12 +91,20 @@ class TCPServer:
 
     def handle_message(self, message_type, data, client_socket):
         if message_type not in self.message_handlers:
-            return {"code": ERROR_INVALID_MESSAGE, "message": MESSAGE_INVALID_MESSAGE}
+            response = {"code": ERROR_INVALID_MESSAGE, "message": MESSAGE_INVALID_MESSAGE}
+            self.communication.send(ERROR_RESPONSE_TYPE, response, client_socket)
+            return response
         
-        handler_func, response_type = self.message_handlers[message_type]
-        response = handler_func(data)
-        self.communication.send(response_type, response, client_socket)
-        return response
+        try:
+            handler_func, response_type = self.message_handlers[message_type]
+            response = handler_func(data)
+            self.communication.send(response_type, response, client_socket)
+            return response
+        except Exception as e:
+            self.logger.error(f"Error in message handler: {str(e)}")
+            response = {"code": ERROR_SERVER_ERROR, "message": "Error processing request"}
+            self.communication.send(ERROR_RESPONSE_TYPE, response, client_socket)
+            return response
 
     def main(self):
         """Main function to start the server"""
@@ -102,6 +116,6 @@ class TCPServer:
         except KeyboardInterrupt:
             self.logger.info("Server shutting down...")
         except Exception as e:
-            self.logger.error(f"Server error: {str(e)}", exc_info=True)
+            self.logger.error(f"Server error: {str(e)}")
         finally:
             self.server_socket.close()
