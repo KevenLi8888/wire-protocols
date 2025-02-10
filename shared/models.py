@@ -22,7 +22,7 @@ class BaseModel:
 class User(BaseModel):
     username: str
     email: str
-    created_at: datetime
+    created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
     _id: Optional[str] = None
     password_hash: Optional[str] = None

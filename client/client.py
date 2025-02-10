@@ -45,6 +45,12 @@ class Client:
         self.current_user: Optional[User] = None
         self.gui = ChatGUI()
         
+        # Set up login success callback
+        self.message_handler.set_login_success_callback(self.gui.show_chat_window)
+        self.message_handler.set_update_user_list_callback(self.update_user_list)
+        self.message_handler.set_current_user_callback(self.set_current_user)
+        self.message_handler.set_receive_message_callback(self.handle_received_message)
+        
         # Initialize callback handler
         self.callback_handler = CallbackHandler(self.send_message)
         
@@ -52,6 +58,7 @@ class Client:
         self.gui.set_send_callback(self.callback_handler.handle_send_message)
         self.gui.set_login_callback(self.callback_handler.handle_login)
         self.gui.set_create_account_callback(self.callback_handler.handle_create_account)
+        self.gui.set_get_users_callback(self.callback_handler.handle_get_users)
 
     def connect(self) -> bool:
         try:
@@ -95,6 +102,40 @@ class Client:
             self.logger.error(f"Client error: {str(e)}", exc_info=True)
         finally:
             self.client_socket.close()
+
+    def update_user_list(self, users_data):
+        """Update the GUI with the list of users"""
+        try:
+            # 为当前用户添加标记
+            for user in users_data:
+                if user['_id'] == self.current_user._id:
+                    user['is_self'] = True
+                else:
+                    user['is_self'] = False
+            self.gui.update_user_list(users_data)
+        except Exception as e:
+            self.logger.error(f"Error updating user list: {str(e)}", exc_info=True)
+
+    def set_current_user(self, user_data):
+        """Set the current user after successful login"""
+        try:
+            self.current_user = User(
+                _id=user_data['_id'],
+                username=user_data['username'],
+                email=user_data['email']
+            )
+            # 更新 CallbackHandler 的 current_user_id
+            self.callback_handler.current_user_id = str(self.current_user._id)
+            self.logger.info(f"Current user set: {self.current_user.username}")
+        except Exception as e:
+            self.logger.error(f"Error setting current user: {str(e)}", exc_info=True)
+
+    def handle_received_message(self, message_data):
+        """处理接收到的消息"""
+        try:
+            self.gui.display_message(message_data)
+        except Exception as e:
+            self.logger.error(f"Error handling received message: {str(e)}", exc_info=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Start the chat client')

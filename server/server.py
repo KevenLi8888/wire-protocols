@@ -39,11 +39,15 @@ class TCPServer:
         
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
+        self.online_users = {}  # 格式: {client_socket: username}
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
         self.message_handlers = {
-            MSG_CREATE_ACCOUNT_REQUEST: (self.user_handler.create_account, MSG_CREATE_ACCOUNT_RESPONSE),  # request type -> (handler_function, response_type)
-            MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE)
+            MSG_CREATE_ACCOUNT_REQUEST: (self.user_handler.create_account, MSG_CREATE_ACCOUNT_RESPONSE),
+            MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE),
+            MSG_GET_USERS_REQUEST: (self.user_handler.get_users, MSG_GET_USERS_RESPONSE),
+            MSG_SEND_MESSAGE_REQUEST: (self.user_handler.send_message, MSG_SEND_MESSAGE_RESPONSE),
+            MSG_GET_UNREAD_MESSAGES_REQUEST: (self.user_handler.get_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE)
         }
 
     def start(self):
@@ -92,6 +96,10 @@ class TCPServer:
                 continue
 
         # Cleanup code moved outside the try-except block
+        if client_socket in self.online_users:
+            username = self.online_users.pop(client_socket)
+            self.logger.info(f"User {username} logged out. Current online users: {list(self.online_users.values())}")
+        
         if client_socket in self.clients:
             self.clients.remove(client_socket)
         try:
@@ -109,8 +117,31 @@ class TCPServer:
         try:
             handler_func, response_type = self.message_handlers[message_type]
             response = handler_func(data)
+            
+            # 处理登录消息
+            if message_type == MSG_LOGIN_REQUEST and response.get('code') == 0:
+                self.online_users[client_socket] = response.get('user')
+                self.logger.info(f"User {response.get('user').get('username')} logged in. Current online users: {list(self.online_users.values())}")
+            
+            # 处理发送消息
+            elif message_type == MSG_SEND_MESSAGE_REQUEST and response.get('code') == SUCCESS:
+                recipient_id = data['recipient_id']
+                # 查找接收者的socket
+                recipient_socket = next(
+                    (socket for socket, user in self.online_users.items() 
+                     if str(user['_id']) == recipient_id), None)
+                
+                if recipient_socket:
+                    # 如果接收者在线，立即发送消息并标记为已读
+                    self.communication.send(MSG_RECEIVE_MESSAGE, response['data'], recipient_socket)
+                    # 标记消息为已读
+                    message_id = response['data'].get('_id')
+                    if message_id:
+                        self.user_handler.messages_collection.mark_as_read([message_id])
+            
             self.communication.send(response_type, response, client_socket)
             return response
+            
         except Exception as e:
             self.logger.error(f"Error in message handler: {str(e)}", exc_info=True)
             response = {"code": ERROR_SERVER_ERROR, "message": MESSAGE_SERVER_ERROR}
