@@ -14,6 +14,8 @@ class MessageHandler:
         self.on_error = None                 # Called to display error messages
         self.on_login_window_close = None    # Called to close login window
         self.on_register_window_close = None # Called to close registration window
+        self.on_search_results = None        # Called when search results arrive
+        self.on_recent_chats_update = None   # Called when recent chats list updates
         
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_RESPONSE: self.handle_create_account_response,
@@ -22,7 +24,10 @@ class MessageHandler:
             MSG_GET_USERS_RESPONSE: self.handle_get_users_response,
             MSG_RECEIVE_MESSAGE: self.handle_receive_message,
             MSG_SEND_MESSAGE_RESPONSE: self.handle_send_message_response,
-            MSG_GET_UNREAD_MESSAGES_RESPONSE: self.handle_unread_messages
+            MSG_GET_UNREAD_MESSAGES_RESPONSE: self.handle_unread_messages,
+            MSG_SEARCH_USERS_RESPONSE: self.handle_search_users_response,
+            MSG_GET_RECENT_CHATS_RESPONSE: self.handle_recent_chats_response,
+            MSG_ERROR_RESPONSE: self.handle_error_message,  # Add this line
         }
 
     # Remove old callback setters and update with new ones
@@ -53,6 +58,14 @@ class MessageHandler:
     def set_close_register_window_callback(self, callback):
         """Set handler for closing registration window"""
         self.on_register_window_close = callback
+
+    def set_search_results_callback(self, callback):
+        """Set handler for search results"""
+        self.on_search_results = callback
+
+    def set_recent_chats_callback(self, callback):
+        """Set handler for recent chats updates"""
+        self.on_recent_chats_update = callback
 
     def handle_message(self, message_type: int, data: Dict[str, Any]):
         if message_type in self.message_handlers:
@@ -121,3 +134,27 @@ class MessageHandler:
             self.logger.error(f"Failed to send message: {data['message']}")
             if self.on_error:
                 self.on_error(data['message'])
+
+    def handle_search_users_response(self, data: Dict[str, Any]):
+        if data['code'] == SUCCESS and self.on_search_results:
+            self.on_search_results(data['users'], data['total_pages'])
+        elif self.on_error:
+            self.on_error(data['message'])
+
+    def handle_recent_chats_response(self, data: Dict[str, Any]):
+        """Handle response containing recent chats"""
+        if data['code'] == SUCCESS:
+            if self.on_recent_chats_update and 'chats' in data:
+                self.on_recent_chats_update(data['chats'], data['total_pages'])
+            self.logger.info("Recent chats fetched successfully")
+        else:
+            self.logger.error(f"Recent chats fetch failed: {data['message']}")
+            if self.on_error:
+                self.on_error(data['message'])
+
+    def handle_error_message(self, data: Dict[str, Any]):
+        """Handle error messages from server"""
+        error_message = data.get('message', 'Unknown error occurred')
+        self.logger.error(f"Server error: {error_message}")
+        if self.on_error:
+            self.on_error(error_message)

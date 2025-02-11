@@ -33,5 +33,5 @@ class Message(BaseModel):
     recipient_id: str
     content: str
     timestamp: datetime
-    read: bool = False
+    is_read: bool = False
     _id: Optional[str] = None  # Changed from id to _id for consistency

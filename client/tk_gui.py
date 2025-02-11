@@ -11,10 +11,13 @@ class ChatGUI:
         self.on_login_attempt = None         # Called when user attempts to login
         self.on_account_create = None        # Called when user attempts to create account
         self.on_user_list_request = None     # Called when UI needs users list refresh
+        self.on_user_search = None           # Called when user performs a search
+        self.on_recent_chats_request = None  # Called when UI needs recent chats refresh
         self.selected_user = None
         self.chat_frame = None
         self.user_map = {}
         self.current_chat_user = None
+        self.page_size = 10
         
         # Create initial window
         self.create_initial_window()
@@ -46,6 +49,20 @@ class ChatGUI:
             callback (callable): Function() -> None
         """
         self.on_user_list_request = callback
+
+    def set_user_search_callback(self, callback):
+        """Set handler for user search
+        Args:
+            callback (callable): Function(pattern: str, page: int)
+        """
+        self.on_user_search = callback
+
+    def set_recent_chats_callback(self, callback):
+        """Set handler for recent chats refresh requests
+        Args:
+            callback (callable): Function(page: int) -> None
+        """
+        self.on_recent_chats_request = callback
 
     def create_initial_window(self):
         """Create the initial window with Login and Register buttons"""
@@ -127,45 +144,205 @@ class ChatGUI:
         ttk.Button(frame, text="Register", command=handle_register).grid(row=3, column=0, columnspan=2, pady=10)
 
     def create_chat_window(self):
-        # 如果聊天窗口已经存在，先销毁
+        # If chat window exists, destroy it first
         if self.chat_frame:
             self.chat_frame.destroy()
             
-        # 主聊天窗口
+        # Main chat window
         self.chat_frame = ttk.Frame(self.root, padding="10")
         self.chat_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # 创建用户列表的滚动条框架
-        user_frame = ttk.Frame(self.chat_frame)
-        user_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.N, tk.S))
+        # Configure grid weights for resizing
+        self.chat_frame.grid_columnconfigure(1, weight=1)
+        self.chat_frame.grid_rowconfigure(0, weight=1)
+
+        # Left panel frame for chat list
+        left_panel = ttk.Frame(self.chat_frame)
+        left_panel.grid(row=0, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
+        left_panel.grid_rowconfigure(1, weight=1)  # Chat list takes remaining space
+        left_panel.grid_columnconfigure(0, weight=1)
         
-        self.user_listbox = tk.Listbox(user_frame, width=15, height=20)
-        user_scrollbar = ttk.Scrollbar(user_frame, orient=tk.VERTICAL, command=self.user_listbox.yview)
-        self.user_listbox.configure(yscrollcommand=user_scrollbar.set)
+        # Recent chats header with refresh button
+        header_frame = ttk.Frame(left_panel)
+        header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
+        ttk.Label(header_frame, text="Recent Chats").pack(side=tk.LEFT, padx=5)
+        ttk.Button(header_frame, text="⟳", width=3, 
+                   command=lambda: self.load_recent_chats(1)).pack(side=tk.RIGHT, padx=5)
         
-        self.user_listbox.pack(side=tk.LEFT, fill=tk.Y)
-        user_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Chat list frame
+        chat_list_frame = ttk.Frame(left_panel)
+        chat_list_frame.grid(row=1, column=0, sticky=(tk.N, tk.S, tk.W, tk.E))
+        
+        # Recent chats listbox
+        self.chat_listbox = tk.Listbox(chat_list_frame, width=20)
+        chat_scrollbar = ttk.Scrollbar(chat_list_frame, orient=tk.VERTICAL, 
+                                     command=self.chat_listbox.yview)
+        self.chat_listbox.configure(yscrollcommand=chat_scrollbar.set)
+        
+        self.chat_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        chat_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Pagination frame
+        pagination_frame = ttk.Frame(left_panel)
+        pagination_frame.grid(row=2, column=0, sticky=(tk.W, tk.E))
+        
+        self.prev_chat_btn = ttk.Button(pagination_frame, text="←", width=3, 
+                                       state=tk.DISABLED)
+        self.prev_chat_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.chat_page_label = ttk.Label(pagination_frame, text="Page 1")
+        self.chat_page_label.pack(side=tk.LEFT, expand=True)
+        
+        self.next_chat_btn = ttk.Button(pagination_frame, text="→", width=3, 
+                                       state=tk.DISABLED)
+        self.next_chat_btn.pack(side=tk.RIGHT, padx=5)
+        
+        # New Chat button
+        new_chat_btn = ttk.Button(left_panel, text="New Chat", 
+                                 command=self.show_new_chat_window)
+        new_chat_btn.grid(row=3, column=0, sticky=(tk.E, tk.W), pady=(5, 0))
 
-        # 消息显示区域（设置为只读）
-        self.message_area = ScrolledText(self.chat_frame, wrap=tk.WORD, width=60, height=20, state='disabled')
-        self.message_area.grid(row=0, column=1, columnspan=2, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        # Bind events
+        self.chat_listbox.bind('<<ListboxSelect>>', self.on_chat_select)
+        
+        # Initialize current page
+        self.current_chat_page = 1
+        self.total_chat_pages = 1
 
-        # 消息输入区域
-        self.message_entry = ttk.Entry(self.chat_frame, width=50)
-        self.message_entry.grid(row=1, column=1, padx=5, pady=5)
+        # Right side chat area
+        chat_area_frame = ttk.Frame(self.chat_frame)
+        chat_area_frame.grid(row=0, column=1, sticky=(tk.N, tk.S, tk.W, tk.E), padx=(10, 0))
+        chat_area_frame.grid_rowconfigure(0, weight=1)
+        chat_area_frame.grid_columnconfigure(0, weight=1)
 
-        # 发送按钮
-        self.send_button = ttk.Button(self.chat_frame, text="Send", command=self.send_message)
-        self.send_button.grid(row=1, column=2, padx=5, pady=5)
+        # Message display area
+        self.message_area = ScrolledText(chat_area_frame, wrap=tk.WORD, width=50, height=20, state='disabled')
+        self.message_area.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # 配置列的权重，使聊天区域能够自适应扩展
-        self.chat_frame.columnconfigure(1, weight=1)
+        # Message input area
+        self.message_entry = ttk.Entry(chat_area_frame)
+        self.message_entry.grid(row=1, column=0, sticky=(tk.W, tk.E), pady=(5, 0))
 
-        # 绑定用户列表的选择事件
-        self.user_listbox.bind('<<ListboxSelect>>', self.on_user_select)
+        # Send button
+        self.send_button = ttk.Button(chat_area_frame, text="Send", command=self.send_message)
+        self.send_button.grid(row=1, column=1, padx=(5, 0), pady=(5, 0))
 
-        # 绑定回车键发送消息
+        # Bind message entry to Enter key
         self.message_entry.bind('<Return>', lambda e: self.send_message())
+
+        # Load initial recent chats
+        self.load_recent_chats(1)
+
+    def show_new_chat_window(self):
+        """Display the new chat window with user search"""
+        self.search_window = tk.Toplevel(self.root)
+        self.search_window.title("New Chat")
+        self.search_window.geometry("300x400")
+        
+        # Search frame
+        search_frame = ttk.Frame(self.search_window, padding="5")
+        search_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Search entry
+        self.search_entry = ttk.Entry(search_frame)
+        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Search button
+        search_btn = ttk.Button(search_frame, text="Search", 
+                               command=lambda: self.perform_search(1))
+        search_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Results frame
+        results_frame = ttk.Frame(self.search_window)
+        results_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Results listbox
+        self.search_results = tk.Listbox(results_frame)
+        self.search_results.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Scrollbar for results
+        scrollbar = ttk.Scrollbar(results_frame, orient=tk.VERTICAL, 
+                                 command=self.search_results.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.search_results.configure(yscrollcommand=scrollbar.set)
+        
+        # Pagination frame
+        pagination_frame = ttk.Frame(self.search_window)
+        pagination_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.prev_btn = ttk.Button(pagination_frame, text="Previous", 
+                                  state=tk.DISABLED)
+        self.prev_btn.pack(side=tk.LEFT)
+        
+        self.next_btn = ttk.Button(pagination_frame, text="Next", 
+                                  state=tk.DISABLED)
+        self.next_btn.pack(side=tk.RIGHT)
+        
+        self.page_label = ttk.Label(pagination_frame, text="Page 1")
+        self.page_label.pack(side=tk.LEFT, padx=5)
+        
+        # Select button
+        select_btn = ttk.Button(self.search_window, text="Start Chat", 
+                               command=self.select_chat_user)
+        select_btn.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Bind events
+        self.search_entry.bind('<Return>', lambda e: self.perform_search(1))
+        self.search_results.bind('<Double-Button-1>', lambda e: self.select_chat_user())
+        
+        self.current_page = 1
+        self.total_pages = 1
+        self.search_results_data = {}  # Store user data for selection
+        
+        # Initial search
+        self.perform_search(1)
+
+    def perform_search(self, page):
+        """Perform user search with pagination"""
+        if self.on_user_search:
+            pattern = self.search_entry.get()
+            self.current_page = page
+            self.on_user_search(pattern, page)
+
+    def update_search_results(self, users, total_pages):
+        """Update search results listbox and pagination"""
+        self.search_results.delete(0, tk.END)
+        self.search_results_data.clear()
+        
+        for user in users:
+            self.search_results.insert(tk.END, user['username'])
+            self.search_results_data[user['username']] = user['_id']
+        
+        self.total_pages = total_pages
+        self.page_label.config(text=f"Page {self.current_page} of {total_pages}")
+        
+        # Update pagination buttons
+        self.prev_btn.config(
+            state=tk.NORMAL if self.current_page > 1 else tk.DISABLED,
+            command=lambda: self.perform_search(self.current_page - 1)
+        )
+        
+        self.next_btn.config(
+            state=tk.NORMAL if self.current_page < total_pages else tk.DISABLED,
+            command=lambda: self.perform_search(self.current_page + 1)
+        )
+
+    def select_chat_user(self):
+        """Handle chat user selection"""
+        selection = self.search_results.curselection()
+        if not selection:
+            return
+            
+        username = self.search_results.get(selection[0])
+        user_id = self.search_results_data.get(username)
+        
+        if user_id:
+            self.current_chat_user = {
+                'username': username,
+                'id': user_id
+            }
+            self.root.title(f"Chat with {username}")
+            self.search_window.destroy()
 
     def append_message(self, message):
         """添加消息到显示区域"""
@@ -208,11 +385,11 @@ class ChatGUI:
 
     def on_user_select(self, event):
         """处理用户选择事件"""
-        selected_indices = self.user_listbox.curselection()
+        selected_indices = self.chat_listbox.curselection()  # Changed from user_listbox to chat_listbox
         if not selected_indices:
             return
             
-        selected_username = self.user_listbox.get(selected_indices[0])
+        selected_username = self.chat_listbox.get(selected_indices[0])  # Changed from user_listbox to chat_listbox
         self.current_chat_user = {
             'username': selected_username,
             'id': self.user_map[selected_username]
@@ -273,22 +450,8 @@ class ChatGUI:
         return "Unknown User"
 
     def update_user_list(self, users):
-        """更新用户列表"""
-        self.user_listbox.delete(0, tk.END)
-        self.user_map.clear()
-        
-        for user in users:
-            # 跳过当前用户自己
-            if user.get('is_self', False):
-                continue
-            display_name = user['username']
-            self.user_listbox.insert(tk.END, display_name)
-            self.user_map[display_name] = user['_id']  # 存储用户名和ID的映射
-            
-        # 如果当前正在聊天的用户不在新的用户列表中，清除当前聊天对象
-        if self.current_chat_user and self.current_chat_user['username'] not in self.user_map:
-            self.current_chat_user = None
-            self.root.title("Chat Application")
+        """This method is now deprecated and should not be used"""
+        pass  # Keep the method for compatibility but don't do anything
 
     def show_error(self, message):
         """Display error message in a separate window"""
@@ -355,6 +518,67 @@ class ChatGUI:
                 self.register_window.destroy()
         except Exception as e:
             print(f"Error closing register window: {e}")
+
+    def load_recent_chats(self, page):
+        """Request recent chats from server"""
+        if self.on_recent_chats_request:
+            self.on_recent_chats_request(page)
+
+    def update_recent_chats(self, chats, total_pages):
+        """Update recent chats display"""
+        self.chat_listbox.delete(0, tk.END)
+        self.chat_map = {}
+        
+        for chat in chats:
+            username = chat['username']
+            unread = chat['unread_count']
+            last_msg = chat['last_message']['content'][:20]
+            
+            # Format display text with last message preview
+            display_text = f"{username}"
+            if unread > 0:
+                display_text += f" ({unread} new message(s))"
+            
+            self.chat_listbox.insert(tk.END, display_text)
+            self.chat_map[display_text] = chat['user_id']
+        
+        # Update pagination
+        self.current_chat_page = self.current_chat_page
+        self.total_chat_pages = total_pages
+        self.chat_page_label.config(text=f"Page {self.current_chat_page} of {total_pages}")
+        
+        self.prev_chat_btn.config(
+            state=tk.NORMAL if self.current_chat_page > 1 else tk.DISABLED,
+            command=lambda: self.load_recent_chats(self.current_chat_page - 1)
+        )
+        
+        self.next_chat_btn.config(
+            state=tk.NORMAL if self.current_chat_page < total_pages else tk.DISABLED,
+            command=lambda: self.load_recent_chats(self.current_chat_page + 1)
+        )
+
+    def on_chat_select(self, event):
+        """Handle chat selection"""
+        selected = self.chat_listbox.curselection()
+        if not selected:
+            return
+            
+        chat_text = self.chat_listbox.get(selected[0])
+        # Extract username from the multiline display (first line before newline)
+        username = chat_text.split('\n')[0]
+        # Remove unread count if present
+        username = username.split(' (')[0]
+        
+        user_id = self.chat_map.get(chat_text)
+        if user_id:
+            self.current_chat_user = {
+                'username': username,
+                'id': user_id
+            }
+            self.root.title(f"Chat with {username}")
+            self.message_area.configure(state='normal')
+            self.message_area.delete('1.0', tk.END)
+            self.message_area.configure(state='disabled')
 
     def run(self):
         self.root.mainloop()

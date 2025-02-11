@@ -56,3 +56,33 @@ class UserHandler:
                 "code": ERROR_SERVER_ERROR,
                 "message": MESSAGE_SERVER_ERROR
             }
+
+    def search_users(self, data):
+        """Handle user search request"""
+        try:
+            pattern = data.get('pattern', '')
+            page = data.get('page', 1)
+            current_user_id = data.get('current_user_id')
+            
+            users, total_pages = self.users.search_users_by_username_paginated(
+                current_user_id, pattern, page
+            )
+            
+            users_data = [{
+                '_id': str(user._id),
+                'username': user.username,
+                'email': user.email
+            } for user in users]
+            
+            return {
+                "code": SUCCESS,
+                "message": MESSAGE_OK,
+                "users": users_data,
+                "total_pages": total_pages
+            }
+        except Exception as e:
+            logging.error(f"Error searching users: {str(e)}")
+            return {
+                "code": ERROR_SERVER_ERROR,
+                "message": MESSAGE_SERVER_ERROR
+            }

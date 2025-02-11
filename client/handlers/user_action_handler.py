@@ -43,3 +43,23 @@ class UserActionHandler:
             'user_id': user_id
         }
         self.send_to_server(MSG_GET_UNREAD_MESSAGES_REQUEST, data)
+
+    def search_users(self, pattern: str, page: int):
+        """Sends a user search request"""
+        data = {
+            'pattern': pattern,
+            'page': page,
+            'current_user_id': self.current_user_id
+        }
+        self.send_to_server(MSG_SEARCH_USERS_REQUEST, data)
+
+    def request_recent_chats(self, page: int):
+        """Requests recent chat list with pagination
+        Args:
+            page (int): Page number to request
+        """
+        data = {
+            'user_id': self.current_user_id,
+            'page': page
+        }
+        self.send_to_server(MSG_GET_RECENT_CHATS_REQUEST, data)

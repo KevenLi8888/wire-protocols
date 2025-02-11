@@ -69,16 +69,18 @@ class Client:
         self.gui.set_send_callback(self.action_handler.send_chat_message)
         self.gui.set_login_callback(self.action_handler.attempt_login)
         self.gui.set_create_account_callback(self.action_handler.create_account)
-        self.gui.set_get_users_callback(self.action_handler.request_user_list)
+        self.gui.set_user_search_callback(self.action_handler.search_users)
+        self.gui.set_recent_chats_callback(self.action_handler.request_recent_chats)
 
         # Server -> GUI (Server responses)
         self.message_handler.set_login_success_callback(self.gui.show_chat_window)
-        self.message_handler.set_update_user_list_callback(self.update_user_list)
         self.message_handler.set_current_user_callback(self.set_current_user)
         self.message_handler.set_receive_message_callback(self.gui.display_message)
         self.message_handler.set_show_error_callback(self.gui.show_error)
         self.message_handler.set_close_login_window_callback(self.gui.close_login_window)
         self.message_handler.set_close_register_window_callback(self.gui.close_register_window)
+        self.message_handler.set_search_results_callback(self.gui.update_search_results)
+        self.message_handler.set_recent_chats_callback(self.gui.update_recent_chats)
 
     # Network operations
     def connect(self) -> bool:
@@ -117,15 +119,6 @@ class Client:
         self.client_socket.close()
 
     # User management
-    def update_user_list(self, users_data):
-        """Update GUI with user list from server"""
-        try:
-            for user in users_data:
-                user['is_self'] = user['_id'] == self.current_user._id
-            self.gui.update_user_list(users_data)
-        except Exception as e:
-            self.logger.error(f"Error updating user list: {str(e)}", exc_info=True)
-
     def set_current_user(self, user_data):
         """Update current user after successful login"""
         try:
@@ -145,6 +138,13 @@ class Client:
             self.gui.display_message(message_data)
         except Exception as e:
             self.logger.error(f"Error handling received message: {str(e)}", exc_info=True)
+
+    def update_recent_chats(self, chats_data):
+        """Update GUI with recent chats from server"""
+        try:
+            self.gui.update_recent_chats(chats_data['chats'], chats_data['total_pages'])
+        except Exception as e:
+            self.logger.error(f"Error updating recent chats: {str(e)}", exc_info=True)
 
     # Application lifecycle
     def run(self):

@@ -4,8 +4,9 @@ from shared.constants import *
 import logging
 
 class MessageHandler:
-    def __init__(self):
+    def __init__(self, logger: logging.Logger):
         self.messages = MessagesCollection()
+        self.logger = logger
 
     def send_message(self, data):
         try:
@@ -30,7 +31,7 @@ class MessageHandler:
             return message_data
             
         except Exception as e:
-            logging.error(f"Error sending message: {str(e)}")
+            self.logger.error(f"Error sending message: {str(e)}")
             return {
                 'code': ERROR_SERVER_ERROR,
                 'message': MESSAGE_SERVER_ERROR
@@ -51,7 +52,28 @@ class MessageHandler:
                 'messages': messages
             }
         except Exception as e:
-            logging.error(f"Error getting unread messages: {str(e)}")
+            self.logger.error(f"Error getting unread messages: {str(e)}")
+            return {
+                'code': ERROR_SERVER_ERROR,
+                'message': MESSAGE_SERVER_ERROR
+            }
+
+    def get_recent_chats(self, data):
+        """Handle request for recent chats"""
+        try:
+            user_id = data['user_id']
+            page = data.get('page', 1)
+            
+            chats, total_pages = self.messages.get_recent_chats(user_id, page)
+            
+            return {
+                'code': SUCCESS,
+                'message': MESSAGE_OK,
+                'chats': chats,
+                'total_pages': total_pages
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting recent chats: {str(e)}")
             return {
                 'code': ERROR_SERVER_ERROR,
                 'message': MESSAGE_SERVER_ERROR
