@@ -9,6 +9,7 @@ from shared.communication import CommunicationInterface
 from shared.constants import *
 from server.handlers.user_handler import UserHandler
 from shared.logger import setup_logger  # Updated import
+from server.handlers.message_handler import MessageHandler  # Add this import
 
 class TCPServer:
     def __init__(self, config_path):
@@ -42,12 +43,13 @@ class TCPServer:
         self.online_users = {}  # 格式: {client_socket: username}
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
+        self.message_handler = MessageHandler()  # Add message handler
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_REQUEST: (self.user_handler.create_account, MSG_CREATE_ACCOUNT_RESPONSE),
             MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE),
             MSG_GET_USERS_REQUEST: (self.user_handler.get_users, MSG_GET_USERS_RESPONSE),
-            MSG_SEND_MESSAGE_REQUEST: (self.user_handler.send_message, MSG_SEND_MESSAGE_RESPONSE),
-            MSG_GET_UNREAD_MESSAGES_REQUEST: (self.user_handler.get_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE)
+            MSG_SEND_MESSAGE_REQUEST: (self.message_handler.send_message, MSG_SEND_MESSAGE_RESPONSE),
+            MSG_GET_UNREAD_MESSAGES_REQUEST: (self.message_handler.get_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE)
         }
 
     def start(self):

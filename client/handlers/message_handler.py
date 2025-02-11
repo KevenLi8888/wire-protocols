@@ -2,6 +2,7 @@ from typing import Dict, Any
 from shared.constants import *
 import logging
 
+# Handles messages received from the server
 class MessageHandler:
     def __init__(self, logger: logging.Logger):
         self.logger = logger
