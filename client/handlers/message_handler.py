@@ -6,9 +6,15 @@ import logging
 class MessageHandler:
     def __init__(self, logger: logging.Logger):
         self.logger = logger
-        self.login_success_callback = None
-        self.update_user_list_callback = None
-        self.current_user_callback = None
+        # UI update callbacks
+        self.on_login_success = None         # Called after successful login
+        self.on_user_list_update = None      # Called when user list needs updating
+        self.on_user_data_update = None      # Called when current user data changes
+        self.on_message_received = None      # Called when new message arrives
+        self.on_error = None                 # Called to display error messages
+        self.on_login_window_close = None    # Called to close login window
+        self.on_register_window_close = None # Called to close registration window
+        
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_RESPONSE: self.handle_create_account_response,
             MSG_LOGIN_RESPONSE: self.handle_login_response,
@@ -18,32 +24,35 @@ class MessageHandler:
             MSG_SEND_MESSAGE_RESPONSE: self.handle_send_message_response,
             MSG_GET_UNREAD_MESSAGES_RESPONSE: self.handle_unread_messages
         }
-        self.receive_message_callback = None
-        self.show_error_callback = None
-        self.close_login_window_callback = None
-        self.close_register_window_callback = None
 
+    # Remove old callback setters and update with new ones
     def set_login_success_callback(self, callback):
-        self.login_success_callback = callback
+        """Set handler for successful login response"""
+        self.on_login_success = callback
 
     def set_update_user_list_callback(self, callback):
-        self.update_user_list_callback = callback
+        """Set handler for user list updates"""
+        self.on_user_list_update = callback
 
     def set_current_user_callback(self, callback):
-        self.current_user_callback = callback
+        """Set handler for current user data updates"""
+        self.on_user_data_update = callback
 
     def set_receive_message_callback(self, callback):
-        self.receive_message_callback = callback
+        """Set handler for incoming messages"""
+        self.on_message_received = callback
 
     def set_show_error_callback(self, callback):
-        """Set callback for showing error messages"""
-        self.show_error_callback = callback
+        """Set handler for error display"""
+        self.on_error = callback
 
     def set_close_login_window_callback(self, callback):
-        self.close_login_window_callback = callback
+        """Set handler for closing login window"""
+        self.on_login_window_close = callback
 
     def set_close_register_window_callback(self, callback):
-        self.close_register_window_callback = callback
+        """Set handler for closing registration window"""
+        self.on_register_window_close = callback
 
     def handle_message(self, message_type: int, data: Dict[str, Any]):
         if message_type in self.message_handlers:
@@ -54,61 +63,61 @@ class MessageHandler:
     def handle_create_account_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
             self.logger.info("Account created successfully")
-            if self.close_register_window_callback:
-                self.close_register_window_callback()
+            if self.on_register_window_close:
+                self.on_register_window_close()
         else:
             self.logger.error(f"Account creation failed: {data['message']}")
-            if self.show_error_callback:
-                self.show_error_callback(data['message'])
+            if self.on_error:
+                self.on_error(data['message'])
 
     def handle_login_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
             self.logger.info("Login successful")
-            if self.current_user_callback and 'user' in data:
-                self.current_user_callback(data['user'])
-            if self.close_login_window_callback:
-                self.close_login_window_callback()  # This closes both login window and initial frame
-            if self.login_success_callback:
-                self.login_success_callback()  # This creates the chat window
+            if self.on_user_data_update and 'user' in data:
+                self.on_user_data_update(data['user'])
+            if self.on_login_window_close:
+                self.on_login_window_close()  # This closes both login window and initial frame
+            if self.on_login_success:
+                self.on_login_success()  # This creates the chat window
         else:
             self.logger.error(f"Login failed: {data['message']}")
-            if self.show_error_callback:
-                self.show_error_callback(data['message'])
+            if self.on_error:
+                self.on_error(data['message'])
 
     def handle_delete_account_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
             self.logger.info("Account deleted successfully")
         else:
             self.logger.error(f"Account deletion failed: {data['message']}")
-            if self.show_error_callback:
-                self.show_error_callback(data['message'])
+            if self.on_error:
+                self.on_error(data['message'])
 
     def handle_get_users_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
-            if self.update_user_list_callback and 'users' in data:
-                self.update_user_list_callback(data['users'])
+            if self.on_user_list_update and 'users' in data:
+                self.on_user_list_update(data['users'])
             self.logger.info("Users fetched successfully")
         else:
             self.logger.error(f"Users fetch failed: {data['message']}")
 
     def handle_receive_message(self, data: Dict[str, Any]):
-        if self.receive_message_callback:
+        if self.on_message_received:
             message_data = {
                 'sender_id': data['sender_id'],
                 'content': data['content'],
                 'timestamp': data['timestamp']
             }
-            self.receive_message_callback(message_data)
+            self.on_message_received(message_data)
 
     def handle_unread_messages(self, data: Dict[str, Any]):
-        if data['code'] == SUCCESS and self.receive_message_callback:
+        if data['code'] == SUCCESS and self.on_message_received:
             for message in data['messages']:
-                self.receive_message_callback(message)
+                self.on_message_received(message)
 
     def handle_send_message_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
             self.logger.info("Message sent successfully")
         else:
             self.logger.error(f"Failed to send message: {data['message']}")
-            if self.show_error_callback:
-                self.show_error_callback(data['message'])
+            if self.on_error:
+                self.on_error(data['message'])

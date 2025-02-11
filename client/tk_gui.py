@@ -7,12 +7,12 @@ class ChatGUI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Chat Application")
-        self.send_callback = None
-        self.login_callback = None
-        self.create_account_callback = None
+        self.on_message_send = None          # Called when user sends a message
+        self.on_login_attempt = None         # Called when user attempts to login
+        self.on_account_create = None        # Called when user attempts to create account
+        self.on_user_list_request = None     # Called when UI needs users list refresh
         self.selected_user = None
         self.chat_frame = None
-        self.get_users_callback = None
         self.user_map = {}
         self.current_chat_user = None
         
@@ -20,20 +20,32 @@ class ChatGUI:
         self.create_initial_window()
 
     def set_send_callback(self, callback):
-        """Set callback for sending messages"""
-        self.send_callback = callback
+        """Set handler for when user sends a message
+        Args:
+            callback (callable): Function(message: str, recipient_id: str)
+        """
+        self.on_message_send = callback
 
     def set_login_callback(self, callback):
-        """Set callback for login"""
-        self.login_callback = callback
+        """Set handler for login attempts
+        Args:
+            callback (callable): Function(email: str, password: str)
+        """
+        self.on_login_attempt = callback
 
     def set_create_account_callback(self, callback):
-        """Set callback for account creation"""
-        self.create_account_callback = callback
+        """Set handler for account creation attempts
+        Args:
+            callback (callable): Function(email: str, username: str, password: str)
+        """
+        self.on_account_create = callback
 
     def set_get_users_callback(self, callback):
-        """Set callback for getting users list"""
-        self.get_users_callback = callback
+        """Set handler for user list refresh requests
+        Args:
+            callback (callable): Function() -> None
+        """
+        self.on_user_list_request = callback
 
     def create_initial_window(self):
         """Create the initial window with Login and Register buttons"""
@@ -70,8 +82,8 @@ class ChatGUI:
                 messagebox.showerror("Error", "Please fill in all fields")
                 return
                 
-            if self.login_callback:
-                self.login_callback(email, password)
+            if self.on_login_attempt:
+                self.on_login_attempt(email, password)
                 # Window will be destroyed in response handler
         
         ttk.Button(frame, text="Login", command=handle_login).grid(row=2, column=0, columnspan=2, pady=10)
@@ -108,8 +120,8 @@ class ChatGUI:
                 messagebox.showerror("Error", "Please fill in all fields")
                 return
                 
-            if self.create_account_callback:
-                self.create_account_callback(email, username, password)
+            if self.on_account_create:
+                self.on_account_create(email, username, password)
                 # Window will be destroyed in response handler
         
         ttk.Button(frame, text="Register", command=handle_register).grid(row=3, column=0, columnspan=2, pady=10)
@@ -188,8 +200,8 @@ class ChatGUI:
                 messagebox.showerror("Error", "Please fill in all fields")
                 return
                 
-            if self.create_account_callback:
-                self.create_account_callback(email, username, password)
+            if self.on_account_create:
+                self.on_account_create(email, username, password)
             register_window.destroy()
             
         ttk.Button(register_window, text="Submit", command=submit_registration).grid(row=3, column=0, columnspan=2, pady=10)
@@ -219,8 +231,8 @@ class ChatGUI:
             messagebox.showerror("Error", "请先选择一个聊天对象")
             return
             
-        if self.send_callback:
-            self.send_callback(message, self.current_chat_user['id'])
+        if self.on_message_send:
+            self.on_message_send(message, self.current_chat_user['id'])
             # 在本地显示发送的消息
             self.display_message({
                 'content': message,
@@ -323,8 +335,8 @@ class ChatGUI:
     def show_chat_window(self):
         """Login success callback to switch to chat window"""
         self.create_chat_window()
-        if self.get_users_callback:
-            self.get_users_callback()
+        if self.on_user_list_request:
+            self.on_user_list_request()
 
     def close_login_window(self):
         """Close login window and destroy initial frame"""
