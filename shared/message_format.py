@@ -107,7 +107,7 @@ LOGIN_REQUEST = MessageFormat({
     'password': MessageField('password', 's')
 })
 
-RESPONSE_FORMAT = MessageFormat({
+CODEMSG_RESPONSE = MessageFormat({
     'code': MessageField('code', 'i'),
     'message': MessageField('message', 's')
 })

@@ -41,7 +41,7 @@ class Client:
 
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
-        self.message_handler = MessageHandler()
+        self.message_handler = MessageHandler(self.logger)
         self.current_user: Optional[User] = None
         self.gui = ChatGUI()
         
@@ -50,6 +50,9 @@ class Client:
         self.message_handler.set_update_user_list_callback(self.update_user_list)
         self.message_handler.set_current_user_callback(self.set_current_user)
         self.message_handler.set_receive_message_callback(self.handle_received_message)
+        self.message_handler.set_show_error_callback(self.gui.show_error)  # Add this line
+        self.message_handler.set_close_login_window_callback(self.gui.close_login_window)
+        self.message_handler.set_close_register_window_callback(self.gui.close_register_window)
         
         # Initialize callback handler
         self.callback_handler = CallbackHandler(self.send_message)

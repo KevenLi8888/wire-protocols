@@ -11,12 +11,13 @@ class ChatGUI:
         self.login_callback = None
         self.create_account_callback = None
         self.selected_user = None
-        self.create_login_window()
         self.chat_frame = None
         self.get_users_callback = None
-        self.update_user_list_callback = None
-        self.user_map = {}  # 添加用户映射字典，用于存储用户名和ID的对应关系
-        self.current_chat_user = None  # 添加当前聊天对象
+        self.user_map = {}
+        self.current_chat_user = None
+        
+        # Create initial window
+        self.create_initial_window()
 
     def set_send_callback(self, callback):
         """Set callback for sending messages"""
@@ -34,21 +35,84 @@ class ChatGUI:
         """Set callback for getting users list"""
         self.get_users_callback = callback
 
-    def create_login_window(self):
-        # 登录窗口
-        self.login_frame = ttk.Frame(self.root, padding="10")
-        self.login_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+    def create_initial_window(self):
+        """Create the initial window with Login and Register buttons"""
+        self.initial_frame = ttk.Frame(self.root, padding="20")
+        self.initial_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Button(self.initial_frame, text="Login", command=self.show_login_window).grid(row=0, column=0, padx=10, pady=10)
+        ttk.Button(self.initial_frame, text="Register", command=self.show_register_window).grid(row=0, column=1, padx=10, pady=10)
 
-        ttk.Label(self.login_frame, text="Email:").grid(row=0, column=0, sticky=tk.W)
-        self.email_entry = ttk.Entry(self.login_frame)
-        self.email_entry.grid(row=0, column=1, padx=5, pady=5)
+    def show_login_window(self):
+        """Display the login window"""
+        
+        self.login_window = tk.Toplevel(self.root)
+        self.login_window.title("Login")
+        self.login_window.transient(self.root)
+        self.login_window.grab_set()  # Make window modal
+        
+        frame = ttk.Frame(self.login_window, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Label(frame, text="Email:").grid(row=0, column=0, sticky=tk.W)
+        email_entry = ttk.Entry(frame)
+        email_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Password:").grid(row=1, column=0, sticky=tk.W)
+        password_entry = ttk.Entry(frame, show="*")
+        password_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        def handle_login():
+            email = email_entry.get()
+            password = password_entry.get()
+            
+            if not email or not password:
+                messagebox.showerror("Error", "Please fill in all fields")
+                return
+                
+            if self.login_callback:
+                self.login_callback(email, password)
+                # Window will be destroyed in response handler
+        
+        ttk.Button(frame, text="Login", command=handle_login).grid(row=2, column=0, columnspan=2, pady=10)
 
-        ttk.Label(self.login_frame, text="Password:").grid(row=1, column=0, sticky=tk.W)
-        self.password_entry = ttk.Entry(self.login_frame, show="*")
-        self.password_entry.grid(row=1, column=1, padx=5, pady=5)
-
-        ttk.Button(self.login_frame, text="Login", command=self.login).grid(row=2, column=0, pady=10)
-        ttk.Button(self.login_frame, text="Register", command=self.register).grid(row=2, column=1, pady=10)
+    def show_register_window(self):
+        """Display the registration window"""
+        
+        self.register_window = tk.Toplevel(self.root)
+        self.register_window.title("Register")
+        self.register_window.transient(self.root)
+        self.register_window.grab_set()  # Make window modal
+        
+        frame = ttk.Frame(self.register_window, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Label(frame, text="Email:").grid(row=0, column=0, sticky=tk.W)
+        email_entry = ttk.Entry(frame)
+        email_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Username:").grid(row=1, column=0, sticky=tk.W)
+        username_entry = ttk.Entry(frame)
+        username_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Password:").grid(row=2, column=0, sticky=tk.W)
+        password_entry = ttk.Entry(frame, show="*")
+        password_entry.grid(row=2, column=1, padx=5, pady=5)
+        
+        def handle_register():
+            email = email_entry.get()
+            username = username_entry.get()
+            password = password_entry.get()
+            
+            if not email or not username or not password:
+                messagebox.showerror("Error", "Please fill in all fields")
+                return
+                
+            if self.create_account_callback:
+                self.create_account_callback(email, username, password)
+                # Window will be destroyed in response handler
+        
+        ttk.Button(frame, text="Register", command=handle_register).grid(row=3, column=0, columnspan=2, pady=10)
 
     def create_chat_window(self):
         # 如果聊天窗口已经存在，先销毁
@@ -97,17 +161,6 @@ class ChatGUI:
         self.message_area.insert(tk.END, message + '\n')
         self.message_area.configure(state='disabled')  # 恢复只读状态
         self.message_area.see(tk.END)  # 滚动到最新消息
-
-    def login(self):
-        email = self.email_entry.get()
-        password = self.password_entry.get()
-        
-        if not email or not password:
-            messagebox.showerror("Error", "Please fill in all fields")
-            return
-            
-        if self.login_callback:
-            self.login_callback(email, password)
 
     def register(self):
         # Create a new registration window
@@ -226,8 +279,42 @@ class ChatGUI:
             self.root.title("Chat Application")
 
     def show_error(self, message):
-        """Display error message"""
-        messagebox.showerror("Error", message)
+        """Display error message in a separate window"""
+        error_window = tk.Toplevel(self.root)
+        error_window.title("Error")
+        error_window.transient(self.root)
+        
+        # Make the window modal
+        error_window.grab_set()
+        
+        # Set minimum size
+        error_window.minsize(300, 100)
+        
+        frame = ttk.Frame(error_window, padding="20")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Message label with word wrap
+        message_label = ttk.Label(frame, text=message, wraplength=250)
+        message_label.grid(row=0, column=0, padx=5, pady=5)
+        
+        def close_error_window():
+            error_window.grab_release()  # Release the grab before destroying
+            error_window.destroy()
+            self.root.focus_set()  # Return focus to main window
+        
+        # OK button to close the window
+        ttk.Button(frame, text="OK", command=close_error_window).grid(row=1, column=0, pady=10)
+        
+        # Bind the window close button (X) to our close handler
+        error_window.protocol("WM_DELETE_WINDOW", close_error_window)
+        
+        # Center the window
+        error_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 50,
+            self.root.winfo_rooty() + 50))
+        
+        # Set focus to the error window
+        error_window.focus_set()
 
     def show_success(self, message):
         """Display success message"""
@@ -235,12 +322,27 @@ class ChatGUI:
 
     def show_chat_window(self):
         """Login success callback to switch to chat window"""
-        # Destroy login frame
-        self.login_frame.destroy()
-        # Create and display chat window
         self.create_chat_window()
         if self.get_users_callback:
             self.get_users_callback()
+
+    def close_login_window(self):
+        """Close login window and destroy initial frame"""
+        try:
+            if hasattr(self, 'login_window') and self.login_window:
+                self.login_window.destroy()
+            if hasattr(self, 'initial_frame') and self.initial_frame:
+                self.initial_frame.destroy()
+        except Exception as e:
+            print(f"Error closing login window: {e}")
+
+    def close_register_window(self):
+        """Close registration window"""
+        try:
+            if hasattr(self, 'register_window') and self.register_window:
+                self.register_window.destroy()
+        except Exception as e:
+            print(f"Error closing register window: {e}")
 
     def run(self):
         self.root.mainloop()
