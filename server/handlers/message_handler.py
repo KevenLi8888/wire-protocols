@@ -78,3 +78,25 @@ class MessageHandler:
                 'code': ERROR_SERVER_ERROR,
                 'message': MESSAGE_SERVER_ERROR
             }
+
+    def get_previous_messages(self, data):
+        """Handle request for previous messages between users"""
+        try:
+            user_id = data['user_id']
+            other_user_id = data['other_user_id']
+            page = data.get('page', 1)
+            
+            messages, total_pages = self.messages.get_previous_messages_between_users(user_id, other_user_id, page)
+            
+            return {
+                'code': SUCCESS,
+                'message': MESSAGE_OK,
+                'messages': messages,
+                'total_pages': total_pages
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting previous messages: {str(e)}")
+            return {
+                'code': ERROR_SERVER_ERROR,
+                'message': MESSAGE_SERVER_ERROR
+            }

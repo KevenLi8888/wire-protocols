@@ -71,6 +71,7 @@ class Client:
         self.gui.set_create_account_callback(self.action_handler.create_account)
         self.gui.set_user_search_callback(self.action_handler.search_users)
         self.gui.set_recent_chats_callback(self.action_handler.request_recent_chats)
+        self.gui.set_previous_messages_callback(self.action_handler.request_previous_messages)
 
         # Server -> GUI (Server responses)
         self.message_handler.set_login_success_callback(self.gui.show_chat_window)
@@ -81,6 +82,7 @@ class Client:
         self.message_handler.set_close_register_window_callback(self.gui.close_register_window)
         self.message_handler.set_search_results_callback(self.gui.update_search_results)
         self.message_handler.set_recent_chats_callback(self.gui.update_recent_chats)
+        self.message_handler.set_previous_messages_callback(self.gui.update_previous_messages)
 
     # Network operations
     def connect(self) -> bool:

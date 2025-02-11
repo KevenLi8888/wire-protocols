@@ -52,6 +52,7 @@ class TCPServer:
             MSG_GET_UNREAD_MESSAGES_REQUEST: (self.message_handler.get_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE),
             MSG_SEARCH_USERS_REQUEST: (self.user_handler.search_users, MSG_SEARCH_USERS_RESPONSE),
             MSG_GET_RECENT_CHATS_REQUEST: (self.message_handler.get_recent_chats, MSG_GET_RECENT_CHATS_RESPONSE),
+            MSG_GET_PREVIOUS_MESSAGES_REQUEST: (self.message_handler.get_previous_messages, MSG_GET_PREVIOUS_MESSAGES_RESPONSE),
         }
 
     def start(self):

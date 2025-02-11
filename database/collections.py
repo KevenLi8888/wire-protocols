@@ -175,3 +175,69 @@ class MessagesCollection:
             formatted_chats.append(formatted_chat)
         
         return formatted_chats, total_pages
+
+    def get_previous_messages_between_users(self, user_id: str, other_user_id: str, page: int = 1, per_page: int = 20):
+        """
+        Get previous messages between two users with pagination
+        Including all messages that are marked as read, and the messages that are sent by the current user (which may not be read yet)
+        """
+        user_object_id = ObjectId(user_id)
+        other_user_object_id = ObjectId(other_user_id)
+        skip = (page - 1) * per_page
+
+        # Query to match read messages or messages sent by current user
+        query = {
+            '$and': [
+                {
+                    '$or': [
+                        {'sender_id': user_object_id, 'recipient_id': other_user_object_id},
+                        {'sender_id': other_user_object_id, 'recipient_id': user_object_id}
+                    ]
+                },
+                {
+                    '$or': [
+                        {'is_read': True},
+                        {'sender_id': user_object_id}  # Include all messages sent by current user
+                    ]
+                }
+            ]
+        }
+
+        # Get total count for pagination
+        total_messages = self.collection.count_documents(query)
+        total_pages = math.ceil(total_messages / per_page)
+
+        # Get messages with pagination
+        messages = self.collection.find(query)\
+            .sort('timestamp')\
+            .skip(skip)\
+            .limit(per_page)
+
+        # Create users collection instance to look up usernames
+        users_collection = UsersCollection()
+        
+        # Cache user info to avoid multiple DB lookups
+        user_cache = {}
+        
+        # Format messages
+        formatted_messages = []
+        for msg in messages:
+            sender_id = str(msg['sender_id'])
+            
+            # Get sender info from cache or database
+            if sender_id not in user_cache:
+                sender = users_collection.find_by_id(sender_id)
+                user_cache[sender_id] = {
+                    'user_id': sender_id,
+                    'username': sender.username if sender else 'Unknown User'
+                }
+            
+            formatted_messages.append({
+                'message_id': str(msg['_id']),
+                'content': msg['content'],
+                'timestamp': msg['timestamp'].isoformat(),
+                'is_from_me': msg['sender_id'] == user_object_id,
+                'sender': user_cache[sender_id]
+            })
+
+        return formatted_messages, total_pages

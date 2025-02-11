@@ -63,3 +63,12 @@ class UserActionHandler:
             'page': page
         }
         self.send_to_server(MSG_GET_RECENT_CHATS_REQUEST, data)
+
+    def request_previous_messages(self, other_user_id: str, page: int):
+        """Requests previous messages between current user and other user"""
+        data = {
+            'user_id': self.current_user_id,
+            'other_user_id': other_user_id,
+            'page': page
+        }
+        self.send_to_server(MSG_GET_PREVIOUS_MESSAGES_REQUEST, data)

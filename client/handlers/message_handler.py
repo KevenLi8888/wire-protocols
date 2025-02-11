@@ -16,6 +16,7 @@ class MessageHandler:
         self.on_register_window_close = None # Called to close registration window
         self.on_search_results = None        # Called when search results arrive
         self.on_recent_chats_update = None   # Called when recent chats list updates
+        self.on_previous_messages = None     # Add this line
         
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_RESPONSE: self.handle_create_account_response,
@@ -28,6 +29,7 @@ class MessageHandler:
             MSG_SEARCH_USERS_RESPONSE: self.handle_search_users_response,
             MSG_GET_RECENT_CHATS_RESPONSE: self.handle_recent_chats_response,
             MSG_ERROR_RESPONSE: self.handle_error_message,  # Add this line
+            MSG_GET_PREVIOUS_MESSAGES_RESPONSE: self.handle_previous_messages_response,
         }
 
     # Remove old callback setters and update with new ones
@@ -66,6 +68,10 @@ class MessageHandler:
     def set_recent_chats_callback(self, callback):
         """Set handler for recent chats updates"""
         self.on_recent_chats_update = callback
+
+    def set_previous_messages_callback(self, callback):
+        """Set handler for previous messages updates"""
+        self.on_previous_messages = callback
 
     def handle_message(self, message_type: int, data: Dict[str, Any]):
         if message_type in self.message_handlers:
@@ -149,6 +155,16 @@ class MessageHandler:
             self.logger.info("Recent chats fetched successfully")
         else:
             self.logger.error(f"Recent chats fetch failed: {data['message']}")
+            if self.on_error:
+                self.on_error(data['message'])
+
+    def handle_previous_messages_response(self, data: Dict[str, Any]):
+        """Handle response containing previous messages"""
+        if data['code'] == SUCCESS:
+            if self.on_previous_messages:
+                self.on_previous_messages(data['messages'], data['total_pages'])
+        else:
+            self.logger.error(f"Previous messages fetch failed: {data['message']}")
             if self.on_error:
                 self.on_error(data['message'])
 

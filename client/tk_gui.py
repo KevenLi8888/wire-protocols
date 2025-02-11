@@ -13,11 +13,14 @@ class ChatGUI:
         self.on_user_list_request = None     # Called when UI needs users list refresh
         self.on_user_search = None           # Called when user performs a search
         self.on_recent_chats_request = None  # Called when UI needs recent chats refresh
+        self.on_previous_messages_request = None  # Add this line
         self.selected_user = None
         self.chat_frame = None
         self.user_map = {}
         self.current_chat_user = None
         self.page_size = 10
+        self.current_messages_page = 1
+        self.total_messages_pages = 1
         
         # Create initial window
         self.create_initial_window()
@@ -63,6 +66,10 @@ class ChatGUI:
             callback (callable): Function(page: int) -> None
         """
         self.on_recent_chats_request = callback
+
+    def set_previous_messages_callback(self, callback):
+        """Set handler for previous messages requests"""
+        self.on_previous_messages_request = callback
 
     def create_initial_window(self):
         """Create the initial window with Login and Register buttons"""
@@ -576,9 +583,59 @@ class ChatGUI:
                 'id': user_id
             }
             self.root.title(f"Chat with {username}")
-            self.message_area.configure(state='normal')
-            self.message_area.delete('1.0', tk.END)
-            self.message_area.configure(state='disabled')
+            self.clear_message_area()
+            self.setup_message_navigation()
+            self.load_previous_messages(1)
+
+    def setup_message_navigation(self):
+        """Create message navigation controls"""
+        nav_frame = ttk.Frame(self.chat_frame)
+        nav_frame.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
+        
+        self.prev_msg_btn = ttk.Button(nav_frame, text="←", width=3,
+                                      command=lambda: self.load_previous_messages(self.current_messages_page - 1))
+        self.prev_msg_btn.pack(side=tk.LEFT, padx=5)
+        
+        self.msg_page_label = ttk.Label(nav_frame, text="Page 1")
+        self.msg_page_label.pack(side=tk.LEFT, expand=True)
+        
+        self.next_msg_btn = ttk.Button(nav_frame, text="→", width=3,
+                                      command=lambda: self.load_previous_messages(self.current_messages_page + 1))
+        self.next_msg_btn.pack(side=tk.RIGHT, padx=5)
+
+    def clear_message_area(self):
+        """Clear the message display area"""
+        self.message_area.configure(state='normal')
+        self.message_area.delete('1.0', tk.END)
+        self.message_area.configure(state='disabled')
+
+    def load_previous_messages(self, page):
+        """Request previous messages for the current chat"""
+        if self.current_chat_user and self.on_previous_messages_request:
+            self.current_messages_page = page
+            self.on_previous_messages_request(self.current_chat_user['id'], page)
+
+    def update_previous_messages(self, messages, total_pages):
+        """Display previous messages with pagination"""
+        self.clear_message_area()
+        self.total_messages_pages = total_pages
+        
+        self.message_area.configure(state='normal')
+        for message in messages:
+            username = "You" if message['is_from_me'] else message['sender']['username']
+            timestamp = message['timestamp']
+            content = message['content']
+            
+            self.message_area.insert(tk.END, f"{username}, at {timestamp}:\n")
+            self.message_area.insert(tk.END, f"{content}\n\n")
+        
+        self.message_area.configure(state='disabled')
+        self.message_area.see('1.0')  # Scroll to top
+        
+        # Update navigation buttons
+        self.msg_page_label.config(text=f"Page {self.current_messages_page} of {total_pages}")
+        self.prev_msg_btn.config(state=tk.NORMAL if self.current_messages_page > 1 else tk.DISABLED)
+        self.next_msg_btn.config(state=tk.NORMAL if self.current_messages_page < total_pages else tk.DISABLED)
 
     def run(self):
         self.root.mainloop()
