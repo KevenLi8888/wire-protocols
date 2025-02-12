@@ -143,7 +143,7 @@ class MessageHandler:
             self.logger.info("Message sent successfully")
             if self.on_message_sent and 'data' in data:
                 # Trigger message refresh after successful send
-                self.on_message_sent(1)  # Load first page
+                self.on_message_sent(-1)  # Load last page of the message history (latest messages)
         else:
             self.logger.error(f"Failed to send message: {data['message']}")
             if self.on_error:

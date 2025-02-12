@@ -580,7 +580,8 @@ class ChatGUI:
             self.root.title(f"Chat with {username}")
             self.clear_message_area()
             self.setup_message_navigation()
-            self.load_previous_messages(1)
+            # Request last page by using -1
+            self.load_previous_messages(-1)
 
     def setup_message_navigation(self):
         """Create message navigation controls"""
@@ -615,6 +616,10 @@ class ChatGUI:
         self.clear_message_area()
         self.total_messages_pages = total_pages
         
+        # If page was -1 or 1, set to last page
+        if self.current_messages_page < 1:
+            self.current_messages_page = total_pages
+        
         self.message_area.configure(state='normal')
         for message in messages:
             username = "You" if message['is_from_me'] else message['sender']['username']
@@ -625,7 +630,7 @@ class ChatGUI:
             self.message_area.insert(tk.END, f"{content}\n\n")
         
         self.message_area.configure(state='disabled')
-        self.message_area.see('1.0')  # Scroll to top
+        self.message_area.see(tk.END)
         
         # Update navigation buttons
         self.msg_page_label.config(text=f"Page {self.current_messages_page} of {total_pages}")

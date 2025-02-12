@@ -176,14 +176,13 @@ class MessagesCollection:
         
         return formatted_chats, total_pages
 
-    def get_previous_messages_between_users(self, user_id: str, other_user_id: str, page: int = 1, per_page: int = 20):
+    def get_previous_messages_between_users(self, user_id: str, other_user_id: str, page: int = 1, per_page: int = 6):
         """
-        Get previous messages between two users with pagination
-        Including all messages that are marked as read, and the messages that are sent by the current user (which may not be read yet)
+        Get previous messages between two users with pagination.
+        If page == -1, returns the last page.
         """
         user_object_id = ObjectId(user_id)
         other_user_object_id = ObjectId(other_user_id)
-        skip = (page - 1) * per_page
 
         # Query to match read messages or messages sent by current user
         query = {
@@ -206,6 +205,12 @@ class MessagesCollection:
         # Get total count for pagination
         total_messages = self.collection.count_documents(query)
         total_pages = math.ceil(total_messages / per_page)
+
+        # Handle last page request
+        if page == -1:
+            page = total_pages
+        
+        skip = (page - 1) * per_page if page > 0 else 0
 
         # Get messages with pagination
         messages = self.collection.find(query)\
