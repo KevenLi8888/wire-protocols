@@ -95,7 +95,7 @@ class MessageFormat:
                 result[field_name] = struct.unpack(f'!{field.format_char}', unescaped)[0]
         return result
 
-# Message format definitions
+# Wire Protocol Message format definitions
 CREATE_ACCOUNT_REQUEST = MessageFormat({
     'email': MessageField('email', 's'),
     'username': MessageField('username', 's'),

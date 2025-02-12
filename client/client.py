@@ -84,6 +84,9 @@ class Client:
         self.message_handler.set_recent_chats_callback(self.gui.update_recent_chats)
         self.message_handler.set_previous_messages_callback(self.gui.update_previous_messages)
 
+        # Add new callback for message sent confirmation
+        self.message_handler.set_message_sent_callback(self.gui.load_previous_messages)
+
     # Network operations
     def connect(self) -> bool:
         """Establish connection to server"""

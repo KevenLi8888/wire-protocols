@@ -13,7 +13,7 @@ class ChatGUI:
         self.on_user_list_request = None     # Called when UI needs users list refresh
         self.on_user_search = None           # Called when user performs a search
         self.on_recent_chats_request = None  # Called when UI needs recent chats refresh
-        self.on_previous_messages_request = None  # Add this line
+        self.on_previous_messages_request = None  
         self.selected_user = None
         self.chat_frame = None
         self.user_map = {}
@@ -417,13 +417,8 @@ class ChatGUI:
             
         if self.on_message_send:
             self.on_message_send(message, self.current_chat_user['id'])
-            # 在本地显示发送的消息
-            self.display_message({
-                'content': message,
-                'sender_id': 'self',  # 用'self'标记自己发送的消息
-                'timestamp': None  # 服务器会提供实际时间戳
-            })
             self.message_entry.delete(0, tk.END)
+            # Message display is now handled after server confirmation
 
     def display_message(self, message_data):
         """显示消息"""

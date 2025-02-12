@@ -16,7 +16,8 @@ class MessageHandler:
         self.on_register_window_close = None # Called to close registration window
         self.on_search_results = None        # Called when search results arrive
         self.on_recent_chats_update = None   # Called when recent chats list updates
-        self.on_previous_messages = None     # Add this line
+        self.on_previous_messages = None
+        self.on_message_sent = None          # New callback for message sent
         
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_RESPONSE: self.handle_create_account_response,
@@ -72,6 +73,10 @@ class MessageHandler:
     def set_previous_messages_callback(self, callback):
         """Set handler for previous messages updates"""
         self.on_previous_messages = callback
+
+    def set_message_sent_callback(self, callback):
+        """Set handler for successful message sending"""
+        self.on_message_sent = callback
 
     def handle_message(self, message_type: int, data: Dict[str, Any]):
         if message_type in self.message_handlers:
@@ -136,6 +141,9 @@ class MessageHandler:
     def handle_send_message_response(self, data: Dict[str, Any]):
         if data['code'] == SUCCESS:
             self.logger.info("Message sent successfully")
+            if self.on_message_sent and 'data' in data:
+                # Trigger message refresh after successful send
+                self.on_message_sent(1)  # Load first page
         else:
             self.logger.error(f"Failed to send message: {data['message']}")
             if self.on_error:
