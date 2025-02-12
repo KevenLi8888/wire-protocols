@@ -22,6 +22,10 @@ class UsersCollection:
     def find_by_email(self, email: str) -> Optional[User]:
         data = self.collection.find_one({"email": email})
         return User.from_dict(data) if data else None
+    
+    def delete_one(self, user_id: str) -> bool:
+        result = self.collection.delete_one({"_id": ObjectId(user_id)})
+        return result.deleted_count > 0
 
     def update_last_login(self, user_id: str) -> bool:
         result = self.collection.update_one(
@@ -84,17 +88,13 @@ class MessagesCollection:
         result = self.collection.insert_one(message)
         return str(result.inserted_id) if result else None
 
-    def get_unread_messages(self, user_id: str) -> list:
+    def get_unread_messages(self, user_id: str, other_user_id: str, num_messages: int) -> list:
         messages = self.collection.find({
             'recipient_id': ObjectId(user_id),
+            'sender_id': ObjectId(other_user_id),
             'is_read': False
-        }).sort('timestamp', 1)
-        return [{
-            '_id': str(msg['_id']),
-            'sender_id': str(msg['sender_id']),
-            'content': msg['content'],
-            'timestamp': msg['timestamp']
-        } for msg in messages]
+        }).sort('timestamp', 1).limit(num_messages)
+        return [msg for msg in messages]
 
     def mark_as_read(self, message_ids: list[str]) -> bool:
         result = self.collection.update_many(
@@ -102,8 +102,14 @@ class MessagesCollection:
             {'$set': {'is_read': True}}
         )
         return result.modified_count > 0
+    
+    def delete_messages(self, message_ids: list[str]) -> bool:
+        result = self.collection.delete_many(
+            {'_id': {'$in': [ObjectId(mid) for mid in message_ids]}}
+        )
+        return result.deleted_count > 0
 
-    def get_recent_chats(self, user_id: str, page: int = 1, per_page: int = 20):
+    def get_recent_chats(self, user_id: str, page: int = 1, per_page: int = 12):
         """Get recent chats for a user with pagination"""
         user_object_id = ObjectId(user_id)
         skip = (page - 1) * per_page
@@ -172,7 +178,15 @@ class MessagesCollection:
                 'timestamp': msg['timestamp'].isoformat(),
                 'is_from_me': msg['sender_id'] == user_object_id
             }
+            # Store original timestamp for sorting
+            formatted_chat['sort_timestamp'] = msg['timestamp']
             formatted_chats.append(formatted_chat)
+        
+        # Sort chats by timestamp before returning
+        formatted_chats.sort(key=lambda x: x['sort_timestamp'], reverse=True)
+        # Remove the sorting timestamp
+        for chat in formatted_chats:
+            del chat['sort_timestamp']
         
         return formatted_chats, total_pages
 
@@ -246,3 +260,26 @@ class MessagesCollection:
             })
 
         return formatted_messages, total_pages
+    
+    def get_chat_unread_count(self, user_id: str, other_user_id: str) -> int:
+        """Get the unread message count between two users"""
+        user_object_id = ObjectId(user_id)
+        other_user_object_id = ObjectId(other_user_id)
+        
+        count = self.collection.count_documents({
+            'sender_id': other_user_object_id,
+            'recipient_id': user_object_id,
+            'is_read': False
+        })
+        
+        return count
+    
+    def delete_user_messages(self, user_id: str):
+        """Delete all messages for a user"""
+        result = self.collection.delete_many({
+            '$or': [
+                {'sender_id': ObjectId(user_id)},
+                {'recipient_id': ObjectId(user_id)}
+            ]
+        })
+        return result.deleted_count

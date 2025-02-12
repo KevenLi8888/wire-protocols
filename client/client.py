@@ -72,20 +72,26 @@ class Client:
         self.gui.set_user_search_callback(self.action_handler.search_users)
         self.gui.set_recent_chats_callback(self.action_handler.request_recent_chats)
         self.gui.set_previous_messages_callback(self.action_handler.request_previous_messages)
+        self.gui.set_get_unread_count_callback(self.action_handler.get_chat_unread_count)
+        self.gui.set_get_unread_messages_callback(self.action_handler.get_chat_unread_messages)
+        self.gui.set_delete_messages_callback(self.action_handler.delete_messages)
+        self.gui.set_delete_account_callback(self.action_handler.delete_account)
 
         # Server -> GUI (Server responses)
         self.message_handler.set_login_success_callback(self.gui.show_chat_window)
         self.message_handler.set_current_user_callback(self.set_current_user)
-        self.message_handler.set_receive_message_callback(self.gui.display_message)
+        self.message_handler.set_receive_message_callback(self.gui.display_message) # no longer needed
         self.message_handler.set_show_error_callback(self.gui.show_error)
         self.message_handler.set_close_login_window_callback(self.gui.close_login_window)
         self.message_handler.set_close_register_window_callback(self.gui.close_register_window)
         self.message_handler.set_search_results_callback(self.gui.update_search_results)
         self.message_handler.set_recent_chats_callback(self.gui.update_recent_chats)
         self.message_handler.set_previous_messages_callback(self.gui.update_previous_messages)
-
-        # Add new callback for message sent confirmation
-        self.message_handler.set_message_sent_callback(self.gui.load_previous_messages)
+        self.message_handler.set_message_sent_callback(self.gui.load_previous_messages) 
+        self.message_handler.set_unread_count_callback(self.gui.show_unread_notification)
+        self.message_handler.set_new_message_update_callback(self.gui.load_recent_chats)
+        self.message_handler.set_close_delete_window_callback(self.gui.close_delete_window)
+        
 
     # Network operations
     def connect(self) -> bool:
@@ -95,6 +101,9 @@ class Client:
             self.logger.info(f"Connected to server {self.host}:{self.port}")
             self._start_receive_thread()
             return True
+        except ConnectionRefusedError as e:
+            self.logger.error(f"Connection refused: {str(e)}", exc_info=True)
+            return False
         except Exception as e:
             self.logger.error(f"Connection failed: {str(e)}", exc_info=True)
             return False
@@ -156,7 +165,7 @@ class Client:
         if self.connect():
             self.gui.run()
 
-    def main(self):
+    def main(self): # pragma no cover
         """Main application entry point"""
         try:
             self.run()
@@ -167,7 +176,7 @@ class Client:
         finally:
             self.client_socket.close()
 
-if __name__ == '__main__':
+if __name__ == '__main__': # pragma no cover
     parser = argparse.ArgumentParser(description='Start the chat client')
     parser.add_argument('--config', type=str, default='./config.json', help='Path to config file')
     

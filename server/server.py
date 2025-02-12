@@ -40,7 +40,7 @@ class TCPServer:
         
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.clients = []
-        self.online_users = {}  # 格式: {client_socket: username}
+        self.online_users = {}  # {client_socket: username}
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
         self.message_handler = MessageHandler(self.logger)  # Add message handler
@@ -49,13 +49,17 @@ class TCPServer:
             MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE),
             MSG_GET_USERS_REQUEST: (self.user_handler.get_users, MSG_GET_USERS_RESPONSE),
             MSG_SEND_MESSAGE_REQUEST: (self.message_handler.send_message, MSG_SEND_MESSAGE_RESPONSE),
-            MSG_GET_UNREAD_MESSAGES_REQUEST: (self.message_handler.get_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE),
             MSG_SEARCH_USERS_REQUEST: (self.user_handler.search_users, MSG_SEARCH_USERS_RESPONSE),
             MSG_GET_RECENT_CHATS_REQUEST: (self.message_handler.get_recent_chats, MSG_GET_RECENT_CHATS_RESPONSE),
             MSG_GET_PREVIOUS_MESSAGES_REQUEST: (self.message_handler.get_previous_messages, MSG_GET_PREVIOUS_MESSAGES_RESPONSE),
+            MSG_GET_CHAT_UNREAD_COUNT_REQUEST: (self.message_handler.get_chat_unread_count, MSG_GET_CHAT_UNREAD_COUNT_RESPONSE),
+            MSG_GET_UNREAD_MESSAGES_REQUEST: (self.message_handler.get_chat_unread_messages, MSG_GET_UNREAD_MESSAGES_RESPONSE),
+            MSG_DELETE_MESSAGE_REQUEST: (self.message_handler.delete_messages, MSG_DELETE_MESSAGE_RESPONSE),
+            MSG_DELETE_ACCOUNT_REQUEST: (self.user_handler.delete_user, MSG_DELETE_ACCOUNT_RESPONSE),
         }
 
-    def start(self):
+    # no need to cover starting code
+    def start(self): # pragma: no cover
         if DatabaseManager.get_instance().db is None:
             self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
@@ -125,8 +129,8 @@ class TCPServer:
             
             # 处理登录消息
             if message_type == MSG_LOGIN_REQUEST and response.get('code') == 0:
-                self.online_users[client_socket] = response.get('user')
-                self.logger.info(f"User {response.get('user').get('username')} logged in. Current online users: {list(self.online_users.values())}")
+                self.online_users[client_socket] = response.get('data').get('user')
+                self.logger.info(f"User {response.get('data').get('user').get('username')} logged in. Current online users: {list(self.online_users.values())}")
             
             # 处理发送消息
             elif message_type == MSG_SEND_MESSAGE_REQUEST and response.get('code') == SUCCESS:
@@ -137,12 +141,8 @@ class TCPServer:
                      if str(user['_id']) == recipient_id), None)
                 
                 if recipient_socket:
-                    # 如果接收者在线，立即发送消息并标记为已读
-                    self.communication.send(MSG_RECEIVE_MESSAGE, response['data'], recipient_socket)
-                    # 标记消息为已读
-                    message_id = response['data'].get('_id')
-                    if message_id:
-                        self.user_handler.messages_collection.mark_as_read([message_id])
+                    # if the recipient is online, notify them
+                    self.communication.send(MSG_NEW_MESSAGE_UPDATE, response['data'], recipient_socket)
             
             self.communication.send(response_type, response, client_socket)
             return response
@@ -153,7 +153,8 @@ class TCPServer:
             self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
 
-    def main(self):
+    
+    def main(self):  # pragma: no cover
         """Main function to start the server"""
         if DatabaseManager.get_instance().db is None:
             self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)

@@ -1,5 +1,6 @@
 from typing import Dict, Any, Callable
 from shared.constants import *
+from shared.utils import hash_password
 
 class UserActionHandler:
     """Handles user-initiated actions by sending appropriate requests to server"""
@@ -12,7 +13,7 @@ class UserActionHandler:
         data = {
             'email': email,
             'username': username,
-            'password': password
+            'password': hash_password(password)
         }
         self.send_to_server(MSG_CREATE_ACCOUNT_REQUEST, data)
 
@@ -20,7 +21,7 @@ class UserActionHandler:
         """Sends a login authentication request"""
         data = {
             'email': email,
-            'password': password
+            'password': hash_password(password)
         }
         self.send_to_server(MSG_LOGIN_REQUEST, data)
 
@@ -36,13 +37,6 @@ class UserActionHandler:
     def request_user_list(self):
         """Requests the current list of active users"""
         self.send_to_server(MSG_GET_USERS_REQUEST, {"user_id": "-1"})
-
-    def fetch_unread_messages(self, user_id: str):
-        """Requests any unread messages for the user"""
-        data = {
-            'user_id': user_id
-        }
-        self.send_to_server(MSG_GET_UNREAD_MESSAGES_REQUEST, data)
 
     def search_users(self, pattern: str, page: int):
         """Sends a user search request"""
@@ -72,3 +66,35 @@ class UserActionHandler:
             'page': page
         }
         self.send_to_server(MSG_GET_PREVIOUS_MESSAGES_REQUEST, data)
+
+    def get_chat_unread_count(self, other_user_id: str):
+        """Requests unread message count for a specific chat"""
+        data = {
+            'user_id': self.current_user_id,
+            'other_user_id': other_user_id
+        }
+        self.send_to_server(MSG_GET_CHAT_UNREAD_COUNT_REQUEST, data)
+
+    def get_chat_unread_messages(self, other_user_id: str, num_messages: int):
+        """Requests specific number of unread messages for a chat"""
+        data = {
+            'user_id': self.current_user_id,
+            'other_user_id': other_user_id,
+            'num_messages': num_messages
+        }
+        self.send_to_server(MSG_GET_UNREAD_MESSAGES_REQUEST, data)
+
+    def delete_messages(self, message_ids: list):
+        """Send request to delete messages"""
+        self.send_to_server(MSG_DELETE_MESSAGE_REQUEST, {
+            'message_ids': message_ids
+        })
+
+    def delete_account(self, email: str, password: str):
+        """Sends an account deletion request"""
+        data = {
+            'email': email,
+            'password': hash_password(password)
+        }
+        self.send_to_server(MSG_DELETE_ACCOUNT_REQUEST, data)
+

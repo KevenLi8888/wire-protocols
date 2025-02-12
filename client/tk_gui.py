@@ -21,6 +21,14 @@ class ChatGUI:
         self.page_size = 10
         self.current_messages_page = 1
         self.total_messages_pages = 1
+        self.on_get_unread_count = None      # Add new callback
+        self.unread_notification_frame = None
+        self.on_get_unread_messages = None  # Add new callback
+        self.selection_mode = False
+        self.selected_messages = set()
+        self.message_checkboxes = {}
+        self.on_delete_messages = None
+        self.on_delete_account = None  # Add new callback
         
         # Create initial window
         self.create_initial_window()
@@ -71,13 +79,29 @@ class ChatGUI:
         """Set handler for previous messages requests"""
         self.on_previous_messages_request = callback
 
+    def set_get_unread_count_callback(self, callback):
+        """Set handler for unread count requests"""
+        self.on_get_unread_count = callback
+
+    def set_get_unread_messages_callback(self, callback):
+        """Set handler for unread messages requests"""
+        self.on_get_unread_messages = callback
+
+    def set_delete_account_callback(self, callback):
+        """Set handler for account deletion attempts
+        Args:
+            callback (callable): Function(email: str, password: str)
+        """
+        self.on_delete_account = callback
+
     def create_initial_window(self):
-        """Create the initial window with Login and Register buttons"""
+        """Create the initial window with Login, Register and Delete Account buttons"""
         self.initial_frame = ttk.Frame(self.root, padding="20")
         self.initial_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         ttk.Button(self.initial_frame, text="Login", command=self.show_login_window).grid(row=0, column=0, padx=10, pady=10)
         ttk.Button(self.initial_frame, text="Register", command=self.show_register_window).grid(row=0, column=1, padx=10, pady=10)
+        ttk.Button(self.initial_frame, text="Delete Account", command=self.show_delete_account_window).grid(row=0, column=2, padx=10, pady=10)
 
     def show_login_window(self):
         """Display the login window"""
@@ -149,6 +173,40 @@ class ChatGUI:
                 # Window will be destroyed in response handler
         
         ttk.Button(frame, text="Register", command=handle_register).grid(row=3, column=0, columnspan=2, pady=10)
+
+    def show_delete_account_window(self):
+        """Display the delete account window"""
+
+        self.delete_window = tk.Toplevel(self.root)
+        self.delete_window.title("Delete Account")
+        self.delete_window.transient(self.root)
+        self.delete_window.grab_set()
+        
+        frame = ttk.Frame(self.delete_window, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Label(frame, text="Email:").grid(row=0, column=0, sticky=tk.W)
+        email_entry = ttk.Entry(frame)
+        email_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(frame, text="Password:").grid(row=1, column=0, sticky=tk.W)
+        password_entry = ttk.Entry(frame, show="*")
+        password_entry.grid(row=1, column=1, padx=5, pady=5)
+        
+        def handle_delete():
+            email = email_entry.get()
+            password = password_entry.get()
+            
+            if not email or not password:
+                messagebox.showerror("Error", "Please fill in all fields")
+                return
+            
+            if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete your account? This action cannot be undone."):
+                if self.on_delete_account:
+                    self.on_delete_account(email, password)
+        
+        ttk.Button(frame, text="Delete Account", 
+                  command=handle_delete, width=20).grid(row=3, column=0, columnspan=2, pady=20)
 
     def create_chat_window(self):
         # If chat window exists, destroy it first
@@ -239,6 +297,21 @@ class ChatGUI:
 
         # Load initial recent chats
         self.load_recent_chats(1)
+
+        # Add selection controls below the message area
+        self.selection_frame = ttk.Frame(chat_area_frame)
+        self.selection_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5,0))
+        
+        ttk.Button(self.selection_frame, text="Select", command=self.toggle_selection_mode).pack(side=tk.LEFT, padx=5)
+        
+        # Create hidden delete controls
+        self.delete_frame = ttk.Frame(chat_area_frame)
+        self.delete_controls = [
+            ttk.Button(self.delete_frame, text="Delete", command=self.delete_selected_messages),
+            ttk.Button(self.delete_frame, text="Cancel", command=self.exit_selection_mode)
+        ]
+        for btn in self.delete_controls:
+            btn.pack(side=tk.LEFT, padx=5)
 
     def show_new_chat_window(self):
         """Display the new chat window with user search"""
@@ -424,6 +497,9 @@ class ChatGUI:
         if self.on_message_send:
             self.on_message_send(message, self.current_chat_user['id'])
             self.message_entry.delete(0, tk.END)
+            # Refresh recent chats after sending message
+            self.load_recent_chats(1)
+            self.current_chat_page = 1
             # Message display is now handled after server confirmation
 
     def display_message(self, message_data):
@@ -527,6 +603,14 @@ class ChatGUI:
         except Exception as e:
             print(f"Error closing register window: {e}")
 
+    def close_delete_window(self):
+        """Close delete account window"""
+        try:
+            if hasattr(self, 'delete_window') and self.delete_window:
+                self.delete_window.destroy()
+        except Exception as e:
+            print(f"Error closing delete window: {e}")
+
     def load_recent_chats(self, page):
         """Request recent chats from server"""
         if self.on_recent_chats_request:
@@ -567,6 +651,10 @@ class ChatGUI:
 
     def on_chat_select(self, event):
         """Handle chat selection"""
+        # Exit selection mode if active
+        if self.selection_mode:
+            self.toggle_selection_mode()
+        
         selected = self.chat_listbox.curselection()
         if not selected:
             return
@@ -586,6 +674,9 @@ class ChatGUI:
             self.root.title(f"Chat with {username}")
             self.clear_message_area()
             self.setup_message_navigation()
+            # Request unread count when selecting chat
+            if self.on_get_unread_count:
+                self.on_get_unread_count(user_id)
             # Request last page by using -1
             self.load_previous_messages(-1)
 
@@ -621,20 +712,39 @@ class ChatGUI:
         """Display previous messages with pagination"""
         self.clear_message_area()
         self.total_messages_pages = total_pages
-        
-        # If page was -1 or 1, set to last page
+         # If page was -1 or 1, set to last page
         if self.current_messages_page < 1:
             self.current_messages_page = total_pages
         
+        self.message_checkboxes.clear()
+        self.selected_messages.clear()
+        
         self.message_area.configure(state='normal')
+        
         for message in messages:
+            msg_id = message['message_id']
             username = "You" if message['is_from_me'] else message['sender']['username']
             timestamp = message['timestamp']
             content = message['content']
             
+            # Create checkbox frame
+            checkbox_frame = ttk.Frame(self.message_area)
+            var = tk.BooleanVar()
+            checkbox = ttk.Checkbutton(checkbox_frame, variable=var)
+            checkbox.pack(side=tk.LEFT)
+            checkbox.configure(command=lambda m=msg_id: self.toggle_message_selection(m))
+            
+            # Store checkbox components
+            self.message_checkboxes[msg_id] = (checkbox_frame, checkbox, var)
+            
+            # Insert checkbox if in selection mode
+            if self.selection_mode:
+                self.message_area.window_create('end', window=checkbox_frame)
+            
+            # Insert message text
             self.message_area.insert(tk.END, f"{username}, at {timestamp}:\n")
             self.message_area.insert(tk.END, f"{content}\n\n")
-        
+            
         self.message_area.configure(state='disabled')
         self.message_area.see(tk.END)
         
@@ -642,6 +752,178 @@ class ChatGUI:
         self.msg_page_label.config(text=f"Page {self.current_messages_page} of {total_pages}")
         self.prev_msg_btn.config(state=tk.NORMAL if self.current_messages_page > 1 else tk.DISABLED)
         self.next_msg_btn.config(state=tk.NORMAL if self.current_messages_page < total_pages else tk.DISABLED)
+
+    def show_unread_notification(self, count):
+        """Show notification for unread messages"""
+        if count == 0:
+            if self.unread_notification_frame:
+                self.unread_notification_frame.destroy()
+                self.unread_notification_frame = None
+            return
+
+        if not self.unread_notification_frame:
+            self.unread_notification_frame = ttk.Frame(self.chat_frame)
+            self.unread_notification_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=(5, 0))
+
+        for widget in self.unread_notification_frame.winfo_children():
+            widget.destroy()
+
+        ttk.Label(self.unread_notification_frame, 
+                 text=f"You have {count} new message{'s' if count > 1 else ''}").pack(side=tk.LEFT)
+        ttk.Button(self.unread_notification_frame, text="Receive", 
+                  command=self.prompt_receive_messages).pack(side=tk.RIGHT)
+
+    def prompt_receive_messages(self):
+        """Show dialog to input number of messages to receive"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Receive Messages")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        frame = ttk.Frame(dialog, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        ttk.Label(frame, text="Number of messages to receive:").grid(row=0, column=0, padx=5, pady=5)
+        entry = ttk.Entry(frame, width=10)
+        entry.grid(row=0, column=1, padx=5, pady=5)
+        entry.insert(0, "10")  # Default value
+        
+        def handle_submit():
+            try:
+                num = int(entry.get())
+                if num > 0:
+                    if self.on_get_unread_messages:
+                        self.on_get_unread_messages(self.current_chat_user['id'], num)
+                        self.load_previous_messages(-1)  # Load latest messages after receiving unread ones
+                        # Refresh recent chats after receiving messages
+                        self.load_recent_chats(1)
+                        self.current_chat_page = 1
+                    if self.on_get_unread_count:
+                        self.on_get_unread_count(self.current_chat_user['id'])
+                    dialog.destroy()
+                else:
+                    messagebox.showerror("Error", "Please enter a positive number")
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid number")
+        
+        ttk.Button(frame, text="Receive", command=handle_submit).grid(row=1, column=0, columnspan=2, pady=10)
+
+    def toggle_selection_mode(self):
+        """Toggle message selection mode"""
+        self.selection_mode = not self.selection_mode
+        if self.selection_mode:
+            self.delete_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(5,0))
+            self.selection_frame.grid_remove()
+            self.show_message_checkboxes()
+        else:
+            self.selection_frame.grid()
+            self.delete_frame.grid_remove()
+            self.hide_message_checkboxes()
+            # Reload messages when exiting selection mode
+            self.load_previous_messages(self.current_messages_page)
+
+    def show_message_checkboxes(self):
+        """Show checkboxes for message selection"""
+        # Save current position
+        current_position = self.message_area.yview()[0]
+        
+        # Get current messages
+        messages_text = self.message_area.get('1.0', tk.END)
+        self.message_area.configure(state='normal')
+        self.message_area.delete('1.0', tk.END)
+        
+        # Reinsert messages with checkboxes
+        lines = messages_text.split('\n')
+        i = 0
+        message_counter = 0
+        
+        while i < len(lines):
+            line = lines[i].strip()
+            if line and ", at " in line:  # Message header line
+                # Get the corresponding checkbox based on message order
+                try:
+                    msg_id = list(self.message_checkboxes.keys())[message_counter]
+                    frame, _, _ = self.message_checkboxes[msg_id]
+                    self.message_area.window_create('end', window=frame)
+                    message_counter += 1
+                except IndexError:
+                    pass  # Skip if no checkbox available
+                    
+                self.message_area.insert(tk.END, f"{line}\n")
+                
+                # Insert content line
+                if i + 1 < len(lines):
+                    self.message_area.insert(tk.END, lines[i+1] + '\n')
+                    if i + 2 < len(lines):
+                        self.message_area.insert(tk.END, '\n')
+                i += 2
+            else:
+                i += 1
+        
+        self.message_area.configure(state='disabled')
+        
+        # Restore scroll position
+        self.message_area.yview_moveto(current_position)
+
+    def hide_message_checkboxes(self):
+        """Hide message checkboxes"""
+        # Save current position
+        current_position = self.message_area.yview()[0]
+        
+        self.message_area.configure(state='normal')
+        
+        # Remove all checkboxes but keep messages
+        start = "1.0"
+        while True:
+            try:
+                # Find next embedded window
+                window_start = self.message_area.search('window', start, tk.END)
+                if not window_start:
+                    break
+                # Remove it
+                self.message_area.delete(window_start, f"{window_start}+1c")
+                start = window_start
+            except tk.TclError:
+                break
+        
+        self.message_area.configure(state='disabled')
+        
+        # Restore scroll position
+        self.message_area.yview_moveto(current_position)
+        
+        # Clear selections
+        self.selected_messages.clear()
+        for _, (_, _, var) in self.message_checkboxes.items():
+            var.set(False)
+
+    def exit_selection_mode(self):
+        """Exit message selection mode"""
+        self.toggle_selection_mode()
+        
+    def delete_selected_messages(self):
+        """Request deletion of selected messages"""
+        if not self.selected_messages:
+            messagebox.showwarning("Warning", "No messages selected")
+            return
+            
+        if messagebox.askyesno("Confirm Delete", "Delete selected messages?"):
+            if self.on_delete_messages:
+                self.on_delete_messages(list(self.selected_messages))
+                # Exit selection mode and reload messages
+                self.toggle_selection_mode()
+                self.load_previous_messages(self.current_messages_page)
+
+    def set_delete_messages_callback(self, callback):
+        """Set handler for message deletion requests"""
+        self.on_delete_messages = callback
+
+    def toggle_message_selection(self, msg_id):
+        """Toggle message selection state"""
+        _, _, var = self.message_checkboxes[msg_id]
+        if var.get():
+            self.selected_messages.add(msg_id)
+        else:
+            self.selected_messages.discard(msg_id)
 
     def run(self):
         self.root.mainloop()

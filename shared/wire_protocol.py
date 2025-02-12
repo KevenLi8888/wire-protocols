@@ -8,21 +8,23 @@ class WireProtocol:
     HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 
     @staticmethod
+    def create_header(message_type: int, length: int) -> bytes:
+        """Create a header for wire protocol message"""
+        return struct.pack('!BHH', WireProtocol.VERSION, message_type, length)
+
+    @staticmethod
+    def parse_header(header: bytes) -> tuple:
+        """Parse a wire protocol header"""
+        version, message_type, length = struct.unpack('!BHH', header)
+        return version, message_type, length
+
+    @staticmethod
     def marshal(message_type: int, message_format: MessageFormat, data: Dict[str, Any]) -> bytes:
         body = message_format.pack(data)
-        header = struct.pack(WireProtocol.HEADER_FORMAT, WireProtocol.VERSION, message_type, len(body))
+        header = WireProtocol.create_header(message_type, len(body))
         return header + body
 
     @staticmethod
-    def unmarshal(data: bytes) -> Tuple[int, int, bytes]:
-        if len(data) < WireProtocol.HEADER_SIZE:
-            raise ValueError("Incomplete message header")
-        
-        version, message_type, body_length = struct.unpack(WireProtocol.HEADER_FORMAT, 
-                                                          data[:WireProtocol.HEADER_SIZE])
-        
-        if version != WireProtocol.VERSION:
-            raise ValueError(f"Unsupported protocol version: {version}")
-        
-        body = data[WireProtocol.HEADER_SIZE:WireProtocol.HEADER_SIZE + body_length]
-        return version, message_type, body
+    def unmarshal(message_format, data: bytes) -> dict:
+        """Unmarshal wire protocol format data"""
+        return message_format.unpack(data)
