@@ -350,6 +350,12 @@ class ChatGUI:
             }
             self.root.title(f"Chat with {username}")
             self.search_window.destroy()
+            
+            # Clear and set up message area for the new chat
+            self.clear_message_area()
+            self.setup_message_navigation()
+            # Request the last page of messages
+            self.load_previous_messages(-1)
 
     def append_message(self, message):
         """添加消息到显示区域"""
