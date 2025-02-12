@@ -13,7 +13,7 @@ class ChatGUI:
         self.on_user_list_request = None     # Called when UI needs users list refresh
         self.on_user_search = None           # Called when user performs a search
         self.on_recent_chats_request = None  # Called when UI needs recent chats refresh
-        self.on_previous_messages_request = None  # Add this line
+        self.on_previous_messages_request = None  
         self.selected_user = None
         self.chat_frame = None
         self.user_map = {}
@@ -350,6 +350,12 @@ class ChatGUI:
             }
             self.root.title(f"Chat with {username}")
             self.search_window.destroy()
+            
+            # Clear and set up message area for the new chat
+            self.clear_message_area()
+            self.setup_message_navigation()
+            # Request the last page of messages
+            self.load_previous_messages(-1)
 
     def append_message(self, message):
         """添加消息到显示区域"""
@@ -417,13 +423,8 @@ class ChatGUI:
             
         if self.on_message_send:
             self.on_message_send(message, self.current_chat_user['id'])
-            # 在本地显示发送的消息
-            self.display_message({
-                'content': message,
-                'sender_id': 'self',  # 用'self'标记自己发送的消息
-                'timestamp': None  # 服务器会提供实际时间戳
-            })
             self.message_entry.delete(0, tk.END)
+            # Message display is now handled after server confirmation
 
     def display_message(self, message_data):
         """显示消息"""
@@ -585,7 +586,8 @@ class ChatGUI:
             self.root.title(f"Chat with {username}")
             self.clear_message_area()
             self.setup_message_navigation()
-            self.load_previous_messages(1)
+            # Request last page by using -1
+            self.load_previous_messages(-1)
 
     def setup_message_navigation(self):
         """Create message navigation controls"""
@@ -620,6 +622,10 @@ class ChatGUI:
         self.clear_message_area()
         self.total_messages_pages = total_pages
         
+        # If page was -1 or 1, set to last page
+        if self.current_messages_page < 1:
+            self.current_messages_page = total_pages
+        
         self.message_area.configure(state='normal')
         for message in messages:
             username = "You" if message['is_from_me'] else message['sender']['username']
@@ -630,7 +636,7 @@ class ChatGUI:
             self.message_area.insert(tk.END, f"{content}\n\n")
         
         self.message_area.configure(state='disabled')
-        self.message_area.see('1.0')  # Scroll to top
+        self.message_area.see(tk.END)
         
         # Update navigation buttons
         self.msg_page_label.config(text=f"Page {self.current_messages_page} of {total_pages}")
