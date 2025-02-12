@@ -33,4 +33,5 @@ class WireProtocol:
         """Unmarshal wire protocol format data"""
         if not data:
             return {}
-        return message_format.unpack(data)
+        unpacked_data, _ = message_format.unpack(data)
+        return unpacked_data

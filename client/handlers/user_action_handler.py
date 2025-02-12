@@ -35,6 +35,7 @@ class UserActionHandler:
         self.send_to_server(MSG_SEND_MESSAGE_REQUEST, data)
 
     def request_user_list(self):
+        """Not used"""
         """Requests the current list of active users"""
         self.send_to_server(MSG_GET_USERS_REQUEST, {"user_id": "-1"})
 

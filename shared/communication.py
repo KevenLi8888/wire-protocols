@@ -73,8 +73,8 @@ class CommunicationInterface:
                         self.logger.error("Failed to decode JSON message")
                     return {}, -1
             else:
-                # First receive the header (5 bytes)
-                header = self._recvall(socket, 5)
+                # First receive the header (HEADER_SIZE bytes)
+                header = self._recvall(socket, WireProtocol.HEADER_SIZE)
                 if not header:
                     return {}, -1
                 
@@ -97,10 +97,13 @@ class CommunicationInterface:
                             self.logger.debug(f"Received message type {message_type} from {peer_name[0]}:{peer_name[1]}")
                         except:
                             self.logger.debug(f"Received message type {message_type}")
-                    return message_format.unpack(body), message_type
+                    unpacked, _ = message_format.unpack(body)
+                    if self.logger:
+                        self.logger.debug(f"Unpacked message: {unpacked}")
+                    return unpacked, message_type
                 except Exception as e:
                     if self.logger:
-                        self.logger.error(f"Failed to unmarshal message: {str(e)}")
+                        self.logger.error(f"Failed to unmarshal message: {str(e)}", exc_info=True)
                     return {}, -1
         except Exception as e:
             if self.logger:

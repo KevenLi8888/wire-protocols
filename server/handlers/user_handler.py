@@ -48,10 +48,10 @@ class UserHandler:
                 "message": MESSAGE_OK,
                 "data": {
                     "user": {
-                    "_id": str(user._id),
-                    "username": user.username,
-                    "email": user.email
-                    }   
+                        "_id": str(user._id),
+                        "username": user.username,
+                        "email": user.email
+                    }
                 }
             }
         except Exception as e:
