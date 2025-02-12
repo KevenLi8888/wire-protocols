@@ -36,7 +36,7 @@ class DatabaseManager:
 
     def _connect(self) -> Optional[Database]:
         try:
-            # Enable retryWrites for Atlas compatibility
+            # 修改：直接返回 client 获取的数据库对象
             client = MongoClient(self._get_connection_string(), retryWrites=True)
             return client[self.database_name]
         except Exception as e:
