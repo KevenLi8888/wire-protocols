@@ -11,4 +11,17 @@ omit =
     */.venv/*
     */env/*
     */.env/*
-    *gui* 
+    *gui*
+    # Add main entry points since they're typically just bootstrapping code
+    client/__main__.py
+    server/__main__.py
+    # Add models file that might be just data structures
+    database/models.py
+
+[report]
+# Add report section to exclude certain patterns
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:
+    pass

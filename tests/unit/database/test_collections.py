@@ -201,11 +201,22 @@ class TestMessagesCollection:
                 "timestamp": datetime.now()
             }
         ]
-        messages_collection.collection.find.return_value.sort.return_value = mock_messages
         
-        # using valid ObjectId string
+        # 正确设置链式调用的 mock
+        mock_find = MagicMock()
+        mock_sort = MagicMock()
+        mock_limit = MagicMock()
+        
+        mock_find.sort.return_value = mock_sort
+        mock_sort.limit.return_value = mock_messages
+        messages_collection.collection.find.return_value = mock_find
+        
+        # using valid ObjectId strings
         user_id = str(ObjectId())
-        messages = messages_collection.get_unread_messages(user_id)
+        other_user_id = str(ObjectId())
+        num_messages = 10
+        
+        messages = messages_collection.get_unread_messages(user_id, other_user_id, num_messages)
         assert len(messages) == 1
         messages_collection.collection.find.assert_called_once()
 

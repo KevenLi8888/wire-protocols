@@ -11,9 +11,17 @@ import logging
 @pytest.fixture(autouse=True)
 def mock_database_manager():
     """全局模拟数据库管理器"""
-    with patch('server.server.DatabaseManager') as mock_manager:
+    with patch('database.collections.DatabaseManager') as mock_manager:
+        # 创建一个模拟的数据库对象
         mock_db = MagicMock()
+        
+        # 设置 messages 集合
+        mock_messages_collection = MagicMock()
+        mock_db.__getitem__.return_value = mock_messages_collection
+        
+        # 设置 db 属性
         mock_manager.get_instance.return_value.db = mock_db
+        
         yield mock_manager
 
 @pytest.fixture(autouse=True)

@@ -10,6 +10,7 @@ class TestMessageHandler:
     @pytest.fixture
     def message_handler(self, mock_db, mock_logger):
         handler = MessageHandler(logger=mock_logger)
+        # 直接设置 mock_db，避免创建真实的数据库连接
         handler.messages = mock_db
         return handler
 

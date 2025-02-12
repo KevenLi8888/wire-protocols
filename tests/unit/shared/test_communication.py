@@ -14,12 +14,17 @@ def test_json_protocol_send(mock_socket, mock_logger):
     comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
     test_data = {"username": "test", "password": "123"}
     
+    # Create a bytearray to store sent data
+    sent_buffer = bytearray()
+    def mock_sendall(data):
+        sent_buffer.extend(data)
+    mock_socket.sendall = mock_sendall
+    
     comm.send(1, test_data, mock_socket)
     
     # Verify the sent data format
-    sent_data = mock_socket.sent_data[0]
-    length_prefix = sent_data[:4]
-    message = sent_data[4:]
+    length_prefix = sent_buffer[:4]
+    message = sent_buffer[4:]
     
     assert struct.unpack('!I', length_prefix)[0] == len(message)
     parsed_message = json.loads(message.decode('utf-8'))
@@ -35,6 +40,18 @@ def test_json_protocol_receive(mock_socket, mock_logger):
     length_prefix = struct.pack('!I', len(message))
     mock_socket.received_data = [length_prefix, message]
     
+    # Mock the recv method to return data from received_data
+    received_data_index = 0
+    def mock_recv(n):
+        nonlocal received_data_index
+        if received_data_index >= len(mock_socket.received_data):
+            return None
+        data = mock_socket.received_data[received_data_index]
+        received_data_index += 1
+        return data
+    
+    mock_socket.recv = mock_recv
+    
     received_data, msg_type = comm.receive(mock_socket)
     
     assert msg_type == 1
@@ -48,9 +65,21 @@ def test_wire_protocol_send(mock_socket, mock_logger):
         "password": "123"
     }
     
+    # Create a bytearray to store sent data
+    sent_buffer = bytearray()
+    def mock_sendall(data):
+        sent_buffer.extend(data)
+    mock_socket.sendall = mock_sendall
+    
     comm.send(1, test_data, mock_socket)
     
-    assert len(mock_socket.sent_data) > 0
+    # Verify that data was actually sent
+    assert len(sent_buffer) > 0
+    
+    # Optional: Verify the wire protocol format
+    version, msg_type, length = WireProtocol.parse_header(sent_buffer[:5])
+    assert msg_type == 1
+    assert length == len(sent_buffer[5:])
 
 def test_wire_protocol_receive(mock_socket, mock_logger):
     comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
@@ -63,7 +92,20 @@ def test_wire_protocol_receive(mock_socket, mock_logger):
     message = CODEMSG_RESPONSE.pack(test_data)
     header = WireProtocol.create_header(message_type=2, length=len(message))
     
+    # Prepare mock socket with test data
     mock_socket.received_data = [header, message]
+    
+    # Mock the recv method to return data from received_data
+    received_data_index = 0
+    def mock_recv(n):
+        nonlocal received_data_index
+        if received_data_index >= len(mock_socket.received_data):
+            return None
+        data = mock_socket.received_data[received_data_index]
+        received_data_index += 1
+        return data
+    
+    mock_socket.recv = mock_recv
     
     received_data, msg_type = comm.receive(mock_socket)
     
@@ -145,6 +187,18 @@ def test_json_protocol_receive_socket_error(mock_socket, mock_logger):
     # Prepare mock socket with test data
     length_prefix = struct.pack('!I', len(message))
     mock_socket.received_data = [length_prefix, message]
+    
+    # Mock the recv method to return data from received_data
+    received_data_index = 0
+    def mock_recv(n):
+        nonlocal received_data_index
+        if received_data_index >= len(mock_socket.received_data):
+            return None
+        data = mock_socket.received_data[received_data_index]
+        received_data_index += 1
+        return data
+    
+    mock_socket.recv = mock_recv
     
     # Make socket.getpeername() raise an error
     mock_socket.getpeername = lambda: None
@@ -266,6 +320,18 @@ def test_wire_protocol_receive_with_logging_error(mock_socket, mock_logger):
     header = WireProtocol.create_header(message_type=2, length=len(message))
     mock_socket.received_data = [header, message]
     
+    # Mock the recv method to return data from received_data
+    received_data_index = 0
+    def mock_recv(n):
+        nonlocal received_data_index
+        if received_data_index >= len(mock_socket.received_data):
+            return None
+        data = mock_socket.received_data[received_data_index]
+        received_data_index += 1
+        return data
+    
+    mock_socket.recv = mock_recv
+    
     # Make getpeername raise an error to trigger the except block
     def mock_getpeername():
         raise OSError("Test error")
@@ -284,6 +350,18 @@ def test_json_protocol_receive_with_logging_error(mock_socket, mock_logger):
     # Prepare mock socket with test data
     length_prefix = struct.pack('!I', len(message))
     mock_socket.received_data = [length_prefix, message]
+    
+    # Mock the recv method to return data from received_data
+    received_data_index = 0
+    def mock_recv(n):
+        nonlocal received_data_index
+        if received_data_index >= len(mock_socket.received_data):
+            return None
+        data = mock_socket.received_data[received_data_index]
+        received_data_index += 1
+        return data
+    
+    mock_socket.recv = mock_recv
     
     # Make getpeername raise an error to trigger the except block
     def mock_getpeername():
