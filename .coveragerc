@@ -1,0 +1,14 @@
+[run]
+source = 
+    client
+    server
+    shared
+
+omit =
+    */tests/*
+    */__init__.py
+    */venv/*
+    */.venv/*
+    */env/*
+    */.env/*
+    *gui* 
