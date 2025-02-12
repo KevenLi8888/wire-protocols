@@ -30,8 +30,9 @@ class MessageField:
     nested_format: 'MessageFormat' = None
 
 class MessageFormat:
-    DELIMITER = b'\0'
-    LIST_DELIMITER = b'\1'
+    # Use less common bytes as delimiters to avoid conflicts
+    DELIMITER = b'\x1E'  # Record Separator
+    LIST_DELIMITER = b'\x1F'  # Unit Separator
     
     def __init__(self, fields: Dict[str, MessageField]):
         self.fields = fields
@@ -42,7 +43,6 @@ class MessageFormat:
         for field_name, field in self.fields.items():
             value = data.get(field_name)
             if value is None:
-                # Consider how to handle missing data, perhaps raise an exception or use a default value
                 continue
 
             if field.format_char:
@@ -51,90 +51,85 @@ class MessageFormat:
                         # Ensure the value is encoded to bytes
                         if isinstance(value, str):
                             value = value.encode('utf-8')
-                        packed_data += struct.pack(f'!{len(value)}s', value)
-                        packed_data += MessageFormat.DELIMITER
-                    elif field.format_char == '?':
-                        packed_data += struct.pack(f'!{field.format_char}', value)
+                        # Add length prefix for strings
+                        length = len(value)
+                        packed_data += struct.pack('!I', length)  # 4-byte length prefix
+                        packed_data += value
                     else:
+                        # For non-string types, pack directly
                         packed_data += struct.pack(f'!{field.format_char}', value)
                 except struct.error as e:
                     raise ValueError(f"Error packing field '{field_name}': {e}")
             elif field.is_nested:
                 if field.is_list:
                     if isinstance(value, list):
+                        # Add list length prefix
+                        packed_data += struct.pack('!I', len(value))
                         for item in value:
-                            packed_data += field.nested_format.pack(item)
-                            packed_data += MessageFormat.LIST_DELIMITER
-                        # Remove the last LIST_DELIMITER if the list is not empty
-                        if value:
-                            packed_data = packed_data[:-len(MessageFormat.LIST_DELIMITER)]
+                            item_packed = field.nested_format.pack(item)
+                            # Add length prefix for each item
+                            packed_data += struct.pack('!I', len(item_packed))
+                            packed_data += item_packed
                     else:
                         raise ValueError(f"Expected a list for field '{field_name}'")
                 else:
-                    packed_data += field.nested_format.pack(value)
+                    nested_packed = field.nested_format.pack(value)
+                    # Add length prefix for nested structure
+                    packed_data += struct.pack('!I', len(nested_packed))
+                    packed_data += nested_packed
             else:
                 raise ValueError(f"Field '{field_name}' must have either a format character or be nested")
         return packed_data
 
     def unpack(self, data: bytes, offset: int = 0) -> Tuple[Dict[str, Any], int]:
         unpacked_data = {}
-        while offset < len(data):
-            for field_name, field in self.fields.items():
-                if field.format_char:
-                    format_size = struct.calcsize(field.format_char)
-                    if field.format_char == 's':
-                        delimiter_index = data.find(MessageFormat.DELIMITER, offset)
-                        if delimiter_index == -1:
-                            raise ValueError(f"Delimiter not found for string field '{field_name}'")
-                        
-                        string_length = delimiter_index - offset
-                        format_string = f'{string_length}s'
-                        
-                        try:
-                            value = struct.unpack(f'!{format_string}', data[offset:delimiter_index])[0].decode('utf-8')
-                        except struct.error as e:
-                            raise ValueError(f"Error unpacking string field '{field_name}': {e}")
-                        
-                        unpacked_data[field_name] = value
-                        offset = delimiter_index + len(MessageFormat.DELIMITER)
-                    else:
-                        try:
-                            if len(data[offset:offset + format_size]) != format_size:
-                                raise ValueError(f"Buffer size mismatch for field '{field_name}'")
-                            value = struct.unpack(f'!{field.format_char}', data[offset:offset + format_size])[0]
-                        except struct.error as e:
-                            raise ValueError(f"Error unpacking field '{field_name}': {e}")
-                        unpacked_data[field_name] = value
-                        offset += format_size
-                elif field.is_nested:
-                    if field.is_list:
-                        unpacked_list = []
-                        while offset < len(data):
-                            delimiter_index = data.find(MessageFormat.LIST_DELIMITER, offset)
-                            if delimiter_index == -1:
-                                delimiter_index = len(data)  # No more list delimiters, consume the rest of the data
-                            
-                            item_data = data[offset:delimiter_index]
-                            if not item_data:
-                                break  # Avoid unpacking empty data
-                            try:
-                                unpacked_item, new_offset = field.nested_format.unpack(item_data)
-                                unpacked_list.append(unpacked_item)
-                                offset = new_offset
-                            except Exception as e:
-                                raise ValueError(f"Error unpacking list item for field '{field_name}': {e}")
-                            
-                            offset = delimiter_index + len(MessageFormat.LIST_DELIMITER)
-                        unpacked_data[field_name] = unpacked_list
-                    else:
-                        try:
-                            unpacked_nested, new_offset = field.nested_format.unpack(data, offset)
-                            unpacked_data[field_name] = unpacked_nested
-                            offset = new_offset
-                        except Exception as e:
-                            raise ValueError(f"Error unpacking nested field '{field_name}': {e}")
+        original_offset = offset
+        
+        for field_name, field in self.fields.items():
+            if offset >= len(data):
+                break
+                
+            if field.format_char:
+                if field.format_char == 's':
+                    # Read string length
+                    length = struct.unpack('!I', data[offset:offset + 4])[0]
+                    offset += 4
+                    value = data[offset:offset + length].decode('utf-8')
+                    offset += length
+                    unpacked_data[field_name] = value
                 else:
-                    raise ValueError(f"Field '{field_name}' must have either a format character or be nested")
+                    format_size = struct.calcsize(f'!{field.format_char}')
+                    value = struct.unpack(f'!{field.format_char}', data[offset:offset + format_size])[0]
+                    offset += format_size
+                    unpacked_data[field_name] = value
+            elif field.is_nested:
+                if field.is_list:
+                    # Read list length
+                    list_length = struct.unpack('!I', data[offset:offset + 4])[0]
+                    offset += 4
+                    unpacked_list = []
+                    
+                    for _ in range(list_length):
+                        # Read item length
+                        item_length = struct.unpack('!I', data[offset:offset + 4])[0]
+                        offset += 4
+                        item_data = data[offset:offset + item_length]
+                        unpacked_item, _ = field.nested_format.unpack(item_data)
+                        unpacked_list.append(unpacked_item)
+                        offset += item_length
+                    
+                    unpacked_data[field_name] = unpacked_list
+                else:
+                    # Read nested structure length
+                    struct_length = struct.unpack('!I', data[offset:offset + 4])[0]
+                    offset += 4
+                    nested_data = data[offset:offset + struct_length]
+                    unpacked_nested, _ = field.nested_format.unpack(nested_data)
+                    unpacked_data[field_name] = unpacked_nested
+                    offset += struct_length
+            else:
+                raise ValueError(f"Field '{field_name}' must have either a format character or be nested")
+                
         return unpacked_data, offset
 
 # Wire Protocol Message format definitions
@@ -233,12 +228,12 @@ GET_RECENT_CHATS_RESPONSE = MessageFormat({
         'chats': MessageField('chats', None, is_nested=True, is_list=True, nested_format=MessageFormat({
             'user_id': MessageField('user_id', 's'),
             'username': MessageField('username', 's'),
+            'unread_count': MessageField('unread_count', 'i'),
             'last_message': MessageField('last_message', None, is_nested=True, nested_format=MessageFormat({
                 'content': MessageField('content', 's'),
                 'timestamp': MessageField('timestamp', 's'),
                 'is_from_me': MessageField('is_from_me', '?')
             })),
-            'timestamp': MessageField('timestamp', 's')
         })),
         'total_pages': MessageField('total_pages', 'i')
     }))
