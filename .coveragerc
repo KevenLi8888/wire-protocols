@@ -17,6 +17,7 @@ omit =
     server/__main__.py
     # Add models file that might be just data structures
     database/models.py
+    config/config.py
 
 [report]
 # Add report section to exclude certain patterns

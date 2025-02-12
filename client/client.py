@@ -23,30 +23,20 @@ class Client:
 
     def _init_config(self, config_path):
         """Initialize configuration"""
+        config = Config.get_instance(config_path)  # 移除外层 try-except，让异常直接传播
+        env = config.get('env')
+        self.logger = setup_logger('client', env)
+        
+        # Get configuration with error handling
         try:
-            config = Config.get_instance(config_path)
-            env = config.get('env')
-            self.logger = setup_logger('client', env)
-            
-           # Get configuration with error handling
-            try:
-                self.host = config.get('communication', 'host')
-                self.port = config.get('communication', 'port')
-                self.protocol_type = config.get('communication', 'protocol_type')
-            except ValueError as e:
-                self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
-                raise RuntimeError("Client configuration is invalid") from e
-            
-            if not self.host:
-                self.host = '127.0.0.1'
-                self.logger.warning(f"No host configured, using default: {self.host}")
-            
-            if not self.port:
-                self.port = 13570
-                self.logger.warning(f"No port configured, using default: {self.port}")
-                
-        except Exception as e:
-            raise RuntimeError(f"Failed to initialize client config: {str(e)}") from e
+            self.host = config.get('communication', 'host')
+            self.port = config.get('communication', 'port')
+            self.protocol_type = config.get('communication', 'protocol_type')
+        except ValueError as e:
+            self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
+            # Set default values if config values are missing
+            self.host = self.host if hasattr(self, 'host') else '127.0.0.1'
+            self.port = self.port if hasattr(self, 'port') else 13570
 
     def _init_network(self):
         """Initialize network components"""
@@ -102,10 +92,14 @@ class Client:
             self._start_receive_thread()
             return True
         except ConnectionRefusedError as e:
-            self.logger.error(f"Connection refused: {str(e)}", exc_info=True)
+            error_msg = f"Connection refused: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            self.gui.show_error(error_msg)
             return False
         except Exception as e:
-            self.logger.error(f"Connection failed: {str(e)}", exc_info=True)
+            error_msg = f"Connection failed: {str(e)}"
+            self.logger.error(error_msg, exc_info=True)
+            self.gui.show_error(error_msg)
             return False
 
     def _start_receive_thread(self):

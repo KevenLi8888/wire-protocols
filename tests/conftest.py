@@ -10,23 +10,23 @@ import logging
 
 @pytest.fixture(autouse=True)
 def mock_database_manager():
-    """全局模拟数据库管理器"""
+    """Global mock database manager"""
     with patch('database.collections.DatabaseManager') as mock_manager:
-        # 创建一个模拟的数据库对象
+        # create a mock database object
         mock_db = MagicMock()
         
-        # 设置 messages 集合
+        # set messages collection
         mock_messages_collection = MagicMock()
         mock_db.__getitem__.return_value = mock_messages_collection
         
-        # 设置 db 属性
+        # set db property
         mock_manager.get_instance.return_value.db = mock_db
         
         yield mock_manager
 
 @pytest.fixture(autouse=True)
 def mock_logger():
-    """全局模拟logger"""
+    """Global mock logger"""
     with patch('server.server.setup_logger') as mock_setup_logger:
         logger = MagicMock()
         logger.error = MagicMock()
@@ -35,10 +35,10 @@ def mock_logger():
         mock_setup_logger.return_value = logger
         yield logger
 
-# 数据库相关fixtures
+# database related fixtures
 @pytest.fixture
 def mock_db():
-    """模拟数据库连接"""
+    """Mock database connection"""
     class MockDB:
         def __init__(self):
             self.users: Dict[str, dict] = {}
@@ -47,7 +47,7 @@ def mock_db():
             self.next_user_id = 1
             
         def insert_one(self, user):
-            """添加新用户"""
+            """Add new user"""
             user_id = str(self.next_user_id)
             self.next_user_id += 1
             self.users[user.email] = {
@@ -59,11 +59,11 @@ def mock_db():
             }
             
         def update_last_login(self, user_id: str):
-            """更新最后登录时间"""
+            """Update last login time"""
             pass
             
         def find_by_email(self, email: str):
-            """通过邮箱查找用户"""
+            """Find user by email"""
             user = self.users.get(email)
             if user:
                 return type('User', (), {
@@ -90,11 +90,11 @@ def mock_db():
             return message_id
             
         def get_recent_chats(self, user_id: str, page: int):
-            # 简单返回空列表和1页
+            # return empty list and 1 page
             return [], 1
             
         def get_previous_messages_between_users(self, user_id: str, other_user_id: str, page: int):
-            # 简单返回空列表和1页
+            # return empty list and 1 page
             return [], 1
             
         def get_chat_unread_count(self, user_id: str, other_user_id: str):
@@ -116,7 +116,7 @@ def mock_db():
             self.next_user_id = 1
             
         def get_all_users(self):
-            """返回所有用户"""
+            """Return all users"""
             return [
                 type('User', (), {
                     '_id': user['_id'],
@@ -128,7 +128,7 @@ def mock_db():
             ]
             
         def search_users_by_username_paginated(self, current_user_id, pattern, page):
-            """搜索用户"""
+            """Search users"""
             matching_users = [
                 type('User', (), {
                     '_id': user['_id'],
@@ -148,7 +148,7 @@ def mock_db():
 # 网络相关fixtures
 @pytest.fixture
 def mock_socket():
-    """模拟socket连接"""
+    """Mock socket connection"""
     socket_mock = MagicMock()
     socket_mock.send = MagicMock(return_value=None)
     socket_mock.recv = MagicMock(return_value=b'')
@@ -156,15 +156,15 @@ def mock_socket():
     socket_mock.close = MagicMock()
     return socket_mock
 
-# 测试用户数据fixtures
+# test user data fixtures
 @pytest.fixture
 def test_users():
-    """返回测试用户数据"""
+    """Return test user data"""
     return [
         {
             "username": "test_user1",
             "password": "password123",
-            "password_hash": "hashed_password_1"  # 实际应该是真实的hash值
+            "password_hash": "hashed_password_1"  # actually should be the real hash value
         },
         {
             "username": "test_user2",
@@ -173,10 +173,10 @@ def test_users():
         }
     ]
 
-# 测试消息数据fixtures
+# test message data fixtures
 @pytest.fixture
 def test_messages():
-    """返回测试消息数据"""
+    """Return test message data"""
     return [
         {
             "id": 1,
@@ -196,10 +196,10 @@ def test_messages():
         }
     ]
 
-# 服务器配置fixtures
+# server configuration fixtures
 @pytest.fixture
 def server_config():
-    """返回服务器配置"""
+    """Return server configuration"""
     return {
         "host": "localhost",
         "port": 12345,
@@ -207,10 +207,10 @@ def server_config():
         "buffer_size": 1024
     }
 
-# 临时配置文件fixtures
+# temporary configuration file fixtures
 @pytest.fixture
 def temp_config_file():
-    """创建临时配置文件"""
+    """Create temporary configuration file"""
     config = {
         "database": {
             "username": "test_user",
@@ -237,28 +237,28 @@ def temp_config_file():
     except OSError:
         pass
 
-# 模拟客户端fixtures
+# mock client fixtures
 @pytest.fixture
 def mock_client():
-    """返回模拟的客户端实例"""
+    """Return mock client instance"""
     client = MagicMock()
     client.connected = True
     client.username = None
     return client
 
-# 模拟服务器fixtures
+# mock server fixtures
 @pytest.fixture
 def mock_server():
-    """返回模拟的服务器实例"""
+    """Return mock server instance"""
     server = MagicMock()
     server.clients = {}
     server.running = True
     return server
 
-# 协议处理fixtures
+# protocol handler fixtures
 @pytest.fixture
 def protocol_handler():
-    """返回协议处理器"""
+    """Return protocol handler"""
     class ProtocolHandler:
         @staticmethod
         def encode_message(message_type: str, payload: dict) -> bytes:

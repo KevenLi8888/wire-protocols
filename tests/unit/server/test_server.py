@@ -6,30 +6,30 @@ from shared.constants import *
 class TestTCPServer:
     @pytest.fixture
     def mock_db_manager(self):
-        """模拟数据库管理器"""
+        """Mock database manager"""
         with patch('server.server.DatabaseManager') as mock_db_manager:
-            # 创建一个模拟的数据库对象
+            # Create a mock database object
             mock_db = MagicMock()
-            # 添加必要的集合
+            # Add necessary collections
             mock_db['users'] = MagicMock()
             mock_db['messages'] = MagicMock()
-            # 设置get_instance().db返回模拟的数据库对象
+            # Set get_instance().db to return the mock database object
             mock_db_manager.get_instance.return_value.db = mock_db
             yield mock_db_manager
 
     @pytest.fixture
     def server(self, temp_config_file, mock_db_manager, mock_logger):
-        """创建服务器实例"""
-        # 添加对UserHandler和MessageHandler的模拟
+        """Create server instance"""
+        # Add mock instances for UserHandler and MessageHandler
         with patch('server.server.setup_logger', return_value=mock_logger), \
              patch('server.server.UserHandler') as mock_user_handler, \
              patch('server.server.MessageHandler') as mock_message_handler:
             
-            # 创建模拟的handler实例
+            # Create mock handler instances
             mock_user_handler_instance = MagicMock()
             mock_message_handler_instance = MagicMock()
             
-            # 设置handler的构造函数返回模拟实例
+            # Set handler constructor to return mock instances
             mock_user_handler.return_value = mock_user_handler_instance
             mock_message_handler.return_value = mock_message_handler_instance
             
@@ -37,7 +37,7 @@ class TestTCPServer:
             return server
 
     def test_server_initialization(self, server):
-        # 验证服务器初始化
+        # Verify server initialization
         assert server.host == '127.0.0.1'
         assert server.port == 13570
         assert len(server.clients) == 0
@@ -45,7 +45,7 @@ class TestTCPServer:
         assert server.message_handlers is not None
 
     def test_handle_message_invalid_type(self, server, mock_socket):
-        # 测试处理无效的消息类型
+        # Test handling invalid message type
         invalid_message_type = "INVALID_MESSAGE_TYPE"
         data = {"some": "data"}
         
@@ -55,7 +55,7 @@ class TestTCPServer:
         assert response['message'] == MESSAGE_INVALID_MESSAGE
 
     def test_handle_message_valid_login(self, server, mock_socket):
-        # 准备登录数据
+        # Prepare login data
         login_data = {
             'email': 'test@example.com',
             'password': 'hashedpassword123'
@@ -73,14 +73,14 @@ class TestTCPServer:
             }
         }
         
-        # 直接设置handler的返回值，而不是使用MagicMock
+        # Set handler return value directly, not using MagicMock
         server.user_handler.login.return_value = mock_response
         server.communication = MagicMock()
         
-        # 执行测试
+        # Execute test
         response = server.handle_message(MSG_LOGIN_REQUEST, login_data, mock_socket)
         
-        # 验证结果
+        # Verify result
         assert response == mock_response
         assert mock_socket in server.online_users
         assert server.online_users[mock_socket] == mock_response['data']['user']
@@ -102,7 +102,7 @@ class TestTCPServer:
             }
         }
         
-        # 直接设置返回值
+        # Set return value directly
         server.message_handler.send_message.return_value = mock_response
         server.communication = MagicMock()
         
@@ -121,7 +121,7 @@ class TestTCPServer:
             'message': MESSAGE_INVALID_CREDENTIALS
         }
         
-        # 直接设置返回值
+        # Set return value directly
         server.user_handler.login.return_value = mock_response
         server.communication = MagicMock()
         
@@ -153,7 +153,7 @@ class TestTCPServer:
             }
         }
         
-        # 直接设置返回值
+        # Set return value directly
         server.message_handler.send_message.return_value = mock_response
         server.communication = MagicMock()
         
@@ -185,42 +185,42 @@ class TestTCPServer:
         assert response == expected_response
 
     def test_handle_client_normal_disconnect(self, server, mock_socket):
-        """测试客户端正常断开连接的情况"""
-        # 设置模拟数据
+        """Test normal client disconnection"""
+        # Set mock data
         server.communication = MagicMock()
-        server.communication.receive.side_effect = [(None, None)]  # 模拟客户端断开连接
-        server.clients.append(mock_socket)  # 使用append而不是add
+        server.communication.receive.side_effect = [(None, None)]  # Simulate client disconnection
+        server.clients.append(mock_socket)  # Use append instead of add
         server.online_users[mock_socket] = "test_user"
         
-        # 执行测试
+        # Execute test
         server.handle_client(mock_socket, ('127.0.0.1', 12345))
         
-        # 验证结果
+        # Verify result
         assert mock_socket not in server.online_users
         assert mock_socket not in server.clients
         mock_socket.close.assert_called_once()
 
     def test_handle_client_connection_error(self, server, mock_socket):
-        """测试连接错误的情况"""
-        # 设置模拟数据
+        """Test connection error handling"""
+        # Set mock data
         server.communication = MagicMock()
         server.communication.receive.side_effect = ConnectionError("Connection lost")
-        server.clients.append(mock_socket)  # 使用append而不是add
+        server.clients.append(mock_socket)  # Use append instead of add
         server.online_users[mock_socket] = "test_user"
         
-        # 执行测试
+        # Execute test
         server.handle_client(mock_socket, ('127.0.0.1', 12345))
         
-        # 验证结果
+        # Verify result
         assert mock_socket not in server.online_users
         assert mock_socket not in server.clients
         mock_socket.close.assert_called_once()
 
     def test_handle_client_unexpected_error(self, server, mock_socket):
-        """测试处理消息时发生意外错误的情况"""
-        # 设置模拟数据
+        """Test unexpected error during message handling"""
+        # Set mock data
         server.communication = MagicMock()
-        # 第一次返回数据触发错误，第二次返回None表示客户端断开
+        # First return data triggers error, second return None indicates client disconnection
         server.communication.receive.side_effect = [
             ({"data": "test"}, "test_type"),
             (None, None)
@@ -228,21 +228,21 @@ class TestTCPServer:
         server.handle_message = MagicMock(side_effect=Exception("Unexpected error"))
         server.clients.append(mock_socket)
         
-        # 执行测试
+        # Execute test
         server.handle_client(mock_socket, ('127.0.0.1', 12345))
         
-        # 验证结果
+        # Verify result
         assert mock_socket not in server.online_users
         assert mock_socket not in server.clients
         mock_socket.close.assert_called_once()
-        # 验证错误被正确记录
+        # Verify error is correctly logged
         server.logger.error.assert_called()
 
     def test_handle_client_error_response_failure(self, server, mock_socket):
-        """测试发送错误响应失败的情况"""
-        # 设置模拟数据
+        """Test failure in sending error response"""
+        # Set mock data
         server.communication = MagicMock()
-        # 第一次返回数据触发错误，第二次返回None表示客户端断开
+        # First return data triggers error, second return None indicates client disconnection
         server.communication.receive.side_effect = [
             ({"data": "test"}, "test_type"),
             (None, None)
@@ -251,12 +251,12 @@ class TestTCPServer:
         server.communication.send.side_effect = ConnectionError("Failed to send error response")
         server.clients.append(mock_socket)
         
-        # 执行测试
+        # Execute test
         server.handle_client(mock_socket, ('127.0.0.1', 12345))
         
-        # 验证结果
+        # Verify result
         assert mock_socket not in server.online_users
         assert mock_socket not in server.clients
         mock_socket.close.assert_called_once()
-        # 验证错误被正确记录
+        # Verify error is correctly logged
         server.logger.error.assert_called()

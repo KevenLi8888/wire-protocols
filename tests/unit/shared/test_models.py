@@ -3,6 +3,7 @@ from datetime import datetime
 from shared.models import User, Message
 
 def test_user_model():
+    """Test User model's from_dict and to_dict methods for proper data conversion"""
     user_data = {
         'username': 'testuser',
         'email': 'test@example.com',
@@ -21,6 +22,7 @@ def test_user_model():
     assert user_dict['email'] == user_data['email']
 
 def test_message_model():
+    """Test Message model's from_dict and to_dict methods for proper message data serialization"""
     message_data = {
         'sender_id': 'user1',
         'recipient_id': 'user2',

@@ -11,6 +11,7 @@ def mock_logger():
     return logging.getLogger("test_logger")
 
 def test_json_protocol_send(mock_socket, mock_logger):
+    """Test sending data using JSON protocol format"""
     comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
     test_data = {"username": "test", "password": "123"}
     
@@ -32,6 +33,7 @@ def test_json_protocol_send(mock_socket, mock_logger):
     assert parsed_message['data'] == test_data
 
 def test_json_protocol_receive(mock_socket, mock_logger):
+    """Test receiving data using JSON protocol format"""
     comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
     test_data = {"username": "test", "password": "123"}
     message = json.dumps({'type': 1, 'data': test_data}).encode('utf-8')
@@ -58,6 +60,7 @@ def test_json_protocol_receive(mock_socket, mock_logger):
     assert received_data == test_data
 
 def test_wire_protocol_send(mock_socket, mock_logger):
+    """Test sending data using wire protocol format"""
     comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
     test_data = {
         "email": "test@example.com",
@@ -82,6 +85,7 @@ def test_wire_protocol_send(mock_socket, mock_logger):
     assert length == len(sent_buffer[5:])
 
 def test_wire_protocol_receive(mock_socket, mock_logger):
+    """Test receiving data using wire protocol format"""
     comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
     test_data = {
         "code": 200,

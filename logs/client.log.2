@@ -1,0 +1,64 @@
+2025-02-12 17:52:49,905 - client - ERROR - Error setting current user: '_id'
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 134, in set_current_user
+    _id=user_data['_id'],
+        ~~~~~~~~~^^^^^^^
+KeyError: '_id'
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 134, in set_current_user
+    _id=user_data['_id'],
+        ~~~~~~~~~^^^^^^^
+KeyError: '_id'
+
+2025-02-12 17:52:49,913 - client - ERROR - Error handling received message: Display error
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 146, in handle_received_message
+    self.gui.display_message(message_data)
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1198, in _execute_mock_call
+    raise effect
+Exception: Display error
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 146, in handle_received_message
+    self.gui.display_message(message_data)
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1198, in _execute_mock_call
+    raise effect
+Exception: Display error
+
+2025-02-12 17:52:49,919 - client - ERROR - Error updating recent chats: Update error
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 153, in update_recent_chats
+    self.gui.update_recent_chats(chats_data['chats'], chats_data['total_pages'])
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1198, in _execute_mock_call
+    raise effect
+Exception: Update error
+Traceback (most recent call last):
+  File "/Users/bjwang/Documents/Distributed Programming/wire-protocols/client/client.py", line 153, in update_recent_chats
+    self.gui.update_recent_chats(chats_data['chats'], chats_data['total_pages'])
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1139, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1143, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/miniconda3/lib/python3.12/unittest/mock.py", line 1198, in _execute_mock_call
+    raise effect
+Exception: Update error
+
