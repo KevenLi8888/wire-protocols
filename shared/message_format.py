@@ -24,19 +24,25 @@ class MessageField:
     """
     name: str
     format_char: str
+    is_nested: bool = False
+    is_list: bool = False
+    nested_format: 'MessageFormat' = None
 
 class MessageFormat:
     DELIMITER = b'\0'
     ESCAPE = b'\\'
+    LIST_DELIMITER = b'\1'  # New delimiter for list items
     
     def __init__(self, fields: Dict[str, MessageField]):
         self.fields = fields
     
     @classmethod
     def escape_bytes(cls, data: bytes) -> bytes:
-        # Escape both escape char and delimiter
+        # First escape the escape character itself
         escaped = data.replace(cls.ESCAPE, cls.ESCAPE + cls.ESCAPE)
+        # Then escape the delimiters
         escaped = escaped.replace(cls.DELIMITER, cls.ESCAPE + cls.DELIMITER)
+        escaped = escaped.replace(cls.LIST_DELIMITER, cls.ESCAPE + cls.LIST_DELIMITER)
         return escaped
     
     @classmethod
@@ -46,9 +52,12 @@ class MessageFormat:
         while i < len(data):
             if data[i:i+1] == cls.ESCAPE:
                 if i + 1 < len(data):
-                    result.append(data[i+1])
-                    i += 2
-                    continue
+                    next_byte = data[i+1:i+2]
+                    # Only unescape if it's followed by an escape char or delimiter
+                    if next_byte in [cls.ESCAPE, cls.DELIMITER, cls.LIST_DELIMITER]:
+                        result.append(data[i+1])
+                        i += 2
+                        continue
             result.append(data[i])
             i += 1
         return bytes(result)
@@ -56,15 +65,28 @@ class MessageFormat:
     def pack(self, data: Dict[str, Any]) -> bytes:
         result = b''
         for field_name, field in self.fields.items():
-            value = data.get(field_name, '')
-            if field.format_char == 's':
+            value = data.get(field_name, '' if not field.is_list else [])
+            
+            if field.is_list:
+                list_items = []
+                for item in value:
+                    if field.is_nested and field.nested_format:
+                        item_bytes = field.nested_format.pack(item)
+                    elif field.format_char == 's':
+                        item_bytes = item.encode('utf-8')
+                    else:
+                        item_bytes = struct.pack(f'!{field.format_char}', item)
+                    list_items.append(self.escape_bytes(item_bytes))
+                value_bytes = self.LIST_DELIMITER.join(list_items)
+            elif field.is_nested and field.nested_format:
+                value_bytes = field.nested_format.pack(value)
+            elif field.format_char == 's':
                 value_bytes = value.encode('utf-8')
-                escaped_bytes = self.escape_bytes(value_bytes)
-                result += escaped_bytes + self.DELIMITER
             else:
                 value_bytes = struct.pack(f'!{field.format_char}', value)
-                escaped_bytes = self.escape_bytes(value_bytes)
-                result += escaped_bytes + self.DELIMITER
+                
+            escaped_bytes = self.escape_bytes(value_bytes)
+            result += escaped_bytes + self.DELIMITER
         return result
 
     def unpack(self, data: bytes) -> Dict[str, Any]:
@@ -89,7 +111,22 @@ class MessageFormat:
 
         for (field_name, field), value_bytes in zip(self.fields.items(), parts):
             unescaped = self.unescape_bytes(value_bytes)
-            if field.format_char == 's':
+            
+            if field.is_list:
+                items = unescaped.split(self.LIST_DELIMITER)
+                result[field_name] = []
+                for item in items:
+                    if not item:  # Skip empty items
+                        continue
+                    if field.is_nested and field.nested_format:
+                        result[field_name].append(field.nested_format.unpack(item))
+                    elif field.format_char == 's':
+                        result[field_name].append(item.decode('utf-8'))
+                    else:
+                        result[field_name].append(struct.unpack(f'!{field.format_char}', item)[0])
+            elif field.is_nested and field.nested_format:
+                result[field_name] = field.nested_format.unpack(unescaped)
+            elif field.format_char == 's':
                 result[field_name] = unescaped.decode('utf-8')
             else:
                 result[field_name] = struct.unpack(f'!{field.format_char}', unescaped)[0]
@@ -102,17 +139,36 @@ CREATE_ACCOUNT_REQUEST = MessageFormat({
     'password': MessageField('password', 's')
 })
 
-LOGIN_REQUEST = MessageFormat({
-    'email': MessageField('email', 's'),
-    'password': MessageField('password', 's')
-})
-
 CODEMSG_RESPONSE = MessageFormat({
     'code': MessageField('code', 'i'),
     'message': MessageField('message', 's')
 })
 
+LOGIN_REQUEST = MessageFormat({
+    'email': MessageField('email', 's'),
+    'password': MessageField('password', 's')
+})
+
 DELETE_ACCOUNT_REQUEST = MessageFormat({
     'email': MessageField('email', 's'),
     'password': MessageField('password', 's')
+})
+
+USER_DATA_FORMAT = MessageFormat({
+    'user_id': MessageField('user_id', 's'),
+    'username': MessageField('username', 's'),
+    'email': MessageField('email', 's')
+})
+
+USER_RESPONSE = MessageFormat({
+    'code': MessageField('code', 'i'),
+    'message': MessageField('message', 's'),
+    'data': MessageField('data', None, is_nested=True, nested_format=USER_DATA_FORMAT)
+})
+
+# Example format definitions using lists
+USERS_LIST_RESPONSE = MessageFormat({
+    'code': MessageField('code', 'i'),
+    'message': MessageField('message', 's'),
+    'data': MessageField('data', None, is_nested=True, is_list=True, nested_format=USER_DATA_FORMAT)
 })

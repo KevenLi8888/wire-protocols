@@ -42,6 +42,7 @@ MESSAGE_USER_NOT_FOUND = "User not found"
 MESSAGE_SERVER_ERROR = "Internal server error"
 
 # Message Format Mapping
+# Message Types -> Message Formats (see shared/message_format.py)
 MESSAGE_FORMATS = {
     MSG_CREATE_ACCOUNT_REQUEST: 'CREATE_ACCOUNT_REQUEST',
     MSG_CREATE_ACCOUNT_RESPONSE: 'CODEMSG_RESPONSE',
