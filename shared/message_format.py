@@ -62,15 +62,25 @@ class MessageFormat:
             if field.format_char:
                 try:
                     if field.format_char == 's':
-                        # Ensure the value is encoded to bytes
-                        if not isinstance(value, (str, bytes)):
+                        if field.is_list:
+                            # Handle list of strings
+                            packed_data += struct.pack('!I', len(value))  # List length
+                            for item in value:
+                                if isinstance(item, str):
+                                    item = item.encode('utf-8')
+                                item_length = len(item)
+                                packed_data += struct.pack('!I', item_length)  # String length
+                                packed_data += item
+                        else:
+                            # Ensure the value is encoded to bytes
+                            if not isinstance(value, (str, bytes)):
                             raise ValueError(f"Field '{field_name}' expects string or bytes, got {type(value)}")
                         if isinstance(value, str):
-                            value = value.encode('utf-8')
-                        # Add length prefix for strings
-                        length = len(value)
-                        packed_data += struct.pack('!I', length)  # 4-byte length prefix
-                        packed_data += value
+                                value = value.encode('utf-8')
+                            # Add length prefix for strings
+                            length = len(value)
+                            packed_data += struct.pack('!I', length)  # 4-byte length prefix
+                            packed_data += value
                     else:
                         # For non-string types, pack directly
                         packed_data += struct.pack(f'!{field.format_char}', value)
@@ -115,12 +125,28 @@ class MessageFormat:
                 
             if field.format_char:
                 if field.format_char == 's':
-                    # Read string length
-                    length = struct.unpack('!I', data[offset:offset + 4])[0]
-                    offset += 4
-                    value = data[offset:offset + length].decode('utf-8')
-                    offset += length
-                    unpacked_data[field_name] = value
+                    if field.is_list:
+                        # Read list length
+                        list_length = struct.unpack('!I', data[offset:offset + 4])[0]
+                        offset += 4
+                        string_list = []
+                        
+                        # Read each string in the list
+                        for _ in range(list_length):
+                            str_length = struct.unpack('!I', data[offset:offset + 4])[0]
+                            offset += 4
+                            string_value = data[offset:offset + str_length].decode('utf-8')
+                            string_list.append(string_value)
+                            offset += str_length
+                        
+                        unpacked_data[field_name] = string_list
+                    else:
+                        # Read string length
+                        length = struct.unpack('!I', data[offset:offset + 4])[0]
+                        offset += 4
+                        value = data[offset:offset + length].decode('utf-8')
+                        offset += length
+                        unpacked_data[field_name] = value
                 else:
                     format_size = struct.calcsize(f'!{field.format_char}')
                     value = struct.unpack(f'!{field.format_char}', data[offset:offset + format_size])[0]

@@ -67,7 +67,7 @@ class CommunicationInterface:
                     self.logger.debug(f"Sent message type {message_type}: {data}")
         except Exception as e:
             if self.logger:
-                self.logger.error(f"Error sending message: {str(e)}")
+                self.logger.error(f"Error sending message: {str(e)}, data: {data}", exc_info=True)
 
     def receive(self, socket) -> Tuple[Dict[str, Any], int]:
         """Receive a message from the specified socket using the configured protocol
