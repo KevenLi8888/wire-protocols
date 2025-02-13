@@ -32,7 +32,7 @@ class CommunicationConfig:
 
 @dataclass(frozen=True)
 class AppConfig:
-    database: DatabaseConfig
+    database: Optional[DatabaseConfig]
     communication: CommunicationConfig
     env: str
     created_at: datetime = field(default_factory=datetime.now)
@@ -45,7 +45,7 @@ class AppConfig:
     def from_dict(cls, data: Dict[str, Any]) -> 'AppConfig':
         try:
             return cls(
-                database=DatabaseConfig(**data['database']),
+                database=DatabaseConfig(**data['database']) if 'database' in data else None,
                 communication=CommunicationConfig(**data['communication']),
                 env=data['env']
             )
