@@ -32,6 +32,23 @@ The application provides a complete chat experience with account management, rea
 - Message grouping by chat conversations
 - Selection mode for batch message operations
 
+#### Screenshots
+
+Register page
+![register](assets/register.png)
+Login page
+![login](assets/login.png)
+Main chat page
+![main chat](assets/main_chat.png)
+New chat page
+![new chat](assets/new_chat.png)
+Receive messages
+![receive_messages](assets/receive_messages.png)
+Messages received
+![messages_received](assets/messages_received.png)
+Delete messages
+![delete_messages](assets/delete_messages.png)
+
 ## Getting Started
 
 > Note: If you're grading the assignment, we provide a deployed version of the server for testing purposes so you don't have to create a MongoDB Atlas account. Please refer to the Canvas submission for the server IP address and port.
