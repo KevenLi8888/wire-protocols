@@ -1,9 +1,9 @@
-# MongoDB driver with srv support
-pymongo[srv]>=4.6.1
-
-# Testing dependencies
-pytest>=7.4.3
-pytest-cov>=4.1.0  # For coverage reporting
-
-# Logging and utilities
-python-dateutil>=2.8.2  # For datetime handling
+coverage==7.6.12
+dnspython==2.7.0
+iniconfig==2.0.0
+packaging==24.2
+pluggy==1.5.0
+pymongo==4.11
+pytest==8.3.4
+pytest-asyncio==0.25.3
+pytest-cov==6.0.0
