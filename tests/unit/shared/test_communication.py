@@ -80,9 +80,9 @@ def test_wire_protocol_send(mock_socket, mock_logger):
     assert len(sent_buffer) > 0
     
     # Optional: Verify the wire protocol format
-    version, msg_type, length = WireProtocol.parse_header(sent_buffer[:5])
+    version, msg_type, length = WireProtocol.parse_header(sent_buffer[:7])  # Changed from 5 to 7 to match HEADER_SIZE
     assert msg_type == 1
-    assert length == len(sent_buffer[5:])
+    assert length == len(sent_buffer[7:])
 
 def test_wire_protocol_receive(mock_socket, mock_logger):
     """Test receiving data using wire protocol format"""

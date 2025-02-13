@@ -30,15 +30,29 @@ class MessageField:
     nested_format: 'MessageFormat' = None
 
 class MessageFormat:
-    # Use less common bytes as delimiters to avoid conflicts
-    DELIMITER = b'\x1E'  # Record Separator
-    LIST_DELIMITER = b'\x1F'  # Unit Separator
+    """Message format handler for packing and unpacking structured data.
+    
+    Handles serialization and deserialization of structured data using a defined message format.
+    Uses custom delimiters to separate records and list items.
+    """
+    
+    # Use ASCII control characters as delimiters to avoid conflicts with regular data
+    DELIMITER = b'\x1E'  # Record Separator (RS) - Separates records in a data stream
+    LIST_DELIMITER = b'\x1F'  # Unit Separator (US) - Separates items within a list
     
     def __init__(self, fields: Dict[str, MessageField]):
         self.fields = fields
     
 
     def pack(self, data: Dict[str, Any]) -> bytes:
+        """Pack structured data into bytes according to the defined message format.
+        
+        The packing process follows these steps for each field:
+        1. For basic types (using format_char): directly pack using struct
+        2. For strings: add 4-byte length prefix, then the encoded string
+        3. For nested structures: recursively pack and add length prefix
+        4. For lists: add list length, then pack each item with its own length prefix
+        """
         packed_data = b''
         for field_name, field in self.fields.items():
             value = data.get(field_name)
@@ -49,6 +63,8 @@ class MessageFormat:
                 try:
                     if field.format_char == 's':
                         # Ensure the value is encoded to bytes
+                        if not isinstance(value, (str, bytes)):
+                            raise ValueError(f"Field '{field_name}' expects string or bytes, got {type(value)}")
                         if isinstance(value, str):
                             value = value.encode('utf-8')
                         # Add length prefix for strings
@@ -82,6 +98,14 @@ class MessageFormat:
         return packed_data
 
     def unpack(self, data: bytes, offset: int = 0) -> Tuple[Dict[str, Any], int]:
+        """Unpack bytes data into structured format according to the message definition.
+        
+        The unpacking process mirrors the packing process:
+        1. For basic types: directly unpack using struct
+        2. For strings: read length prefix, then decode string data
+        3. For nested structures: read length, then recursively unpack
+        4. For lists: read list length, then unpack each item using its length prefix
+        """
         unpacked_data = {}
         original_offset = offset
         
@@ -132,17 +156,14 @@ class MessageFormat:
                 
         return unpacked_data, offset
 
-# Wire Protocol Message format definitions
-# Refer to Message Format Mapping in shared/constants.py
+# Wire Protocol Message Formats
+# Each format defines the structure of messages exchanged between client and server
+
+# Authentication Related Formats
 CREATE_ACCOUNT_REQUEST = MessageFormat({
     'email': MessageField('email', 's'),
     'username': MessageField('username', 's'),
     'password': MessageField('password', 's')
-})
-
-CODEMSG_RESPONSE = MessageFormat({
-    'code': MessageField('code', 'i'),
-    'message': MessageField('message', 's')
 })
 
 LOGIN_REQUEST = MessageFormat({
@@ -150,20 +171,50 @@ LOGIN_REQUEST = MessageFormat({
     'password': MessageField('password', 's')
 })
 
-"""
-Example Login Response
-{
-    "code": SUCCESS, 
-    "message": MESSAGE_OK,
-    "data": {
-        "user": {
-            "_id": str(user._id),
-            "username": user.username,
-            "email": user.email
-        }
-    }
-}
-"""
+# Standard Response Format for Operations
+CODEMSG_RESPONSE = MessageFormat({
+    'code': MessageField('code', 'i'),  # Status code (success/error)
+    'message': MessageField('message', 's')  # Status message or error description
+})
+
+# Chat and Messaging Related Formats
+SEND_MESSAGE_REQUEST = MessageFormat({
+    'content': MessageField('content', 's'),
+    'recipient_id': MessageField('recipient_id', 's'),
+    'sender_id': MessageField('sender_id', 's')
+})
+
+# User Search and Management Formats
+SEARCH_USERS_REQUEST = MessageFormat({
+    'pattern': MessageField('pattern', 's'),  # Search pattern/query
+    'page': MessageField('page', 'i'),  # Pagination page number
+    'current_user_id': MessageField('current_user_id', 's')
+})
+
+# Chat History and Recent Conversations
+GET_RECENT_CHATS_REQUEST = MessageFormat({
+    'user_id': MessageField('user_id', 's'),
+    'page': MessageField('page', 'i')  # For pagination
+})
+
+# Message Management
+DELETE_MESSAGE_REQUEST = MessageFormat({
+    'message_ids': MessageField('message_ids', 's', is_list=True)  # List of message IDs to delete
+})
+
+# Account Management
+DELETE_ACCOUNT_REQUEST = MessageFormat({
+    'email': MessageField('email', 's'),
+    'password': MessageField('password', 's')  # For verification
+})
+
+# Example/Reference Formats
+USER_DATA_FORMAT = MessageFormat({
+    'user_id': MessageField('user_id', 's'),
+    'username': MessageField('username', 's'),
+    'email': MessageField('email', 's')
+})
+
 LOGIN_RESPONSE = MessageFormat({
     'code': MessageField('code', 'i'),
     'message': MessageField('message', 's'),
@@ -179,12 +230,6 @@ LOGIN_RESPONSE = MessageFormat({
 # GET_USERS_REQUEST = NOT CURRENTLY USED
 # GET_USERS_RESPONSE = NOT CURRENTLY USED
 
-SEND_MESSAGE_REQUEST = MessageFormat({
-    'content': MessageField('content', 's'),
-    'recipient_id': MessageField('recipient_id', 's'),
-    'sender_id': MessageField('sender_id', 's')
-})
-
 SEND_MESSAGE_RESPONSE = MessageFormat({
     'code': MessageField('code', 'i'),
     'message': MessageField('message', 's'),
@@ -195,12 +240,6 @@ SEND_MESSAGE_RESPONSE = MessageFormat({
         'content': MessageField('content', 's'),
         'timestamp': MessageField('timestamp', 's'),
     }))
-})
-
-SEARCH_USERS_REQUEST = MessageFormat({
-    'pattern': MessageField('pattern', 's'),
-    'page': MessageField('page', 'i'),
-    'current_user_id': MessageField('current_user_id', 's')
 })
 
 SEARCH_USERS_RESPONSE = MessageFormat({
@@ -214,11 +253,6 @@ SEARCH_USERS_RESPONSE = MessageFormat({
         })),
         'total_pages': MessageField('total_pages', 'i')
     }))
-})
-
-GET_RECENT_CHATS_REQUEST = MessageFormat({
-    'user_id': MessageField('user_id', 's'),
-    'page': MessageField('page', 'i')
 })
 
 GET_RECENT_CHATS_RESPONSE = MessageFormat({
@@ -286,25 +320,6 @@ GET_UNREAD_MESSAGES_REQUEST = MessageFormat({
     'num_messages': MessageField('num_messages', 'i')
 })
 
-"""
-formatted_messages = [{
-                'message_id': str(msg['_id']),
-                'sender_id': str(msg['sender_id']),
-                'recipient_id': str(msg['recipient_id']),
-                'content': msg['content'],
-                'timestamp': msg['timestamp'].isoformat(),
-                'is_read': msg['is_read'],
-                'is_from_me': msg['sender_id'] == user_id
-            } for msg in messages]
-            
-            return {
-                'code': SUCCESS,
-                'message': MESSAGE_OK,
-                'data': {
-                    'messages': formatted_messages
-                }
-            }
-"""
 GET_UNREAD_MESSAGES_RESPONSE = MessageFormat({
     'code': MessageField('code', 'i'),
     'message': MessageField('message', 's'),
@@ -319,23 +334,6 @@ GET_UNREAD_MESSAGES_RESPONSE = MessageFormat({
             'is_from_me': MessageField('is_from_me', '?')
         }))
     }))
-})
-
-DELETE_MESSAGE_REQUEST = MessageFormat({
-    'message_ids': MessageField('message_ids', 's', is_list=True)
-})
-
-DELETE_ACCOUNT_REQUEST = MessageFormat({
-    'email': MessageField('email', 's'),
-    'password': MessageField('password', 's')
-})
-
-# Examples below
-
-USER_DATA_FORMAT = MessageFormat({
-    'user_id': MessageField('user_id', 's'),
-    'username': MessageField('username', 's'),
-    'email': MessageField('email', 's')
 })
 
 USER_RESPONSE = MessageFormat({

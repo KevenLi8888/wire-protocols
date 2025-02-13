@@ -6,28 +6,43 @@ from database.connection import DatabaseManager
 from bson import ObjectId
 
 class UsersCollection:
+    """
+    Handles all database operations related to users.
+    Provides methods for CRUD operations, user searches, and authentication updates.
+    Collection schema:
+    - _id: ObjectId
+    - username: str
+    - email: str
+    - last_login: datetime
+    """
     def __init__(self):
+        """Initialize UsersCollection with database connection"""
         self.db = DatabaseManager.get_instance().db
         self.collection = self.db['users']
 
     def insert_one(self, user: User) -> Optional[str]:
+        """Insert a new user into the database and return their ID"""
         user_dict = user.to_dict()
         result = self.collection.insert_one(user_dict)
         return str(result.inserted_id) if result else None
 
     def find_by_username(self, username: str) -> Optional[User]:
+        """Find a user by their username"""
         data = self.collection.find_one({"username": username})
         return User.from_dict(data) if data else None
 
     def find_by_email(self, email: str) -> Optional[User]:
+        """Find a user by their email address"""
         data = self.collection.find_one({"email": email})
         return User.from_dict(data) if data else None
     
     def delete_one(self, user_id: str) -> bool:
+        """Delete a user by their ID and return success status"""
         result = self.collection.delete_one({"_id": ObjectId(user_id)})
         return result.deleted_count > 0
 
     def update_last_login(self, user_id: str) -> bool:
+        """Update user's last login timestamp and return success status"""
         result = self.collection.update_one(
             {"_id": ObjectId(user_id)},
             {"$set": {"last_login": datetime.now()}}
@@ -35,6 +50,7 @@ class UsersCollection:
         return result.modified_count > 0
 
     def get_all_users(self) -> list[User]:
+        """Retrieve all users from the database"""
         users = self.collection.find({}, {'_id': 1, 'username': 1, 'email': 1})
         return [u for u in (User.from_dict(user) for user in users) if u is not None]
     
@@ -73,11 +89,24 @@ class UsersCollection:
             return None
 
 class MessagesCollection:
+    """
+    Handles all database operations related to messages between users.
+    Provides methods for message management, chat history, and read/unread status.
+    Collection schema:
+    - _id: ObjectId
+    - sender_id: ObjectId
+    - recipient_id: ObjectId
+    - content: str
+    - timestamp: datetime
+    - is_read: bool
+    """
     def __init__(self):
+        """Initialize MessagesCollection with database connection"""
         self.db = DatabaseManager.get_instance().db
         self.collection = self.db['messages']
 
     def insert_message(self, sender_id: str, recipient_id: str, content: str) -> Optional[str]:
+        """Insert a new message and return its ID"""
         message = {
             'sender_id': ObjectId(sender_id),
             'recipient_id': ObjectId(recipient_id),
@@ -89,6 +118,7 @@ class MessagesCollection:
         return str(result.inserted_id) if result else None
 
     def get_unread_messages(self, user_id: str, other_user_id: str, num_messages: int) -> list:
+        """Get unread messages between two users with a limit"""
         messages = self.collection.find({
             'recipient_id': ObjectId(user_id),
             'sender_id': ObjectId(other_user_id),
@@ -97,6 +127,7 @@ class MessagesCollection:
         return [msg for msg in messages]
 
     def mark_as_read(self, message_ids: list[str]) -> bool:
+        """Mark multiple messages as read and return success status"""
         result = self.collection.update_many(
             {'_id': {'$in': [ObjectId(mid) for mid in message_ids]}},
             {'$set': {'is_read': True}}
@@ -104,13 +135,27 @@ class MessagesCollection:
         return result.modified_count > 0
     
     def delete_messages(self, message_ids: list[str]) -> bool:
+        """Delete multiple messages by their IDs and return success status"""
         result = self.collection.delete_many(
             {'_id': {'$in': [ObjectId(mid) for mid in message_ids]}}
         )
         return result.deleted_count > 0
 
     def get_recent_chats(self, user_id: str, page: int = 1, per_page: int = 12):
-        """Get recent chats for a user with pagination"""
+        """
+        Get recent chats for a user with pagination.
+        
+        The MongoDB aggregation pipeline:
+        1. Matches messages where the user is either sender or recipient
+        2. Sorts messages by timestamp (newest first)
+        3. Groups messages by the other participant in the conversation
+        4. Calculates unread message count for each chat
+        5. Applies pagination
+        
+        Returns:
+        - List of formatted chat objects with last message and unread count
+        - Total number of pages
+        """
         user_object_id = ObjectId(user_id)
         skip = (page - 1) * per_page
         
@@ -193,7 +238,20 @@ class MessagesCollection:
     def get_previous_messages_between_users(self, user_id: str, other_user_id: str, page: int = 1, per_page: int = 6):
         """
         Get previous messages between two users with pagination.
-        If page == -1, returns the last page.
+        
+        Query conditions:
+        - Messages between the two specified users
+        - Messages that are either:
+          a) Already marked as read
+          b) Sent by the current user
+        
+        Special cases:
+        - If page == -1, returns the last page
+        - Uses user caching to minimize database lookups
+        
+        Returns:
+        - List of formatted messages with sender information
+        - Total number of pages
         """
         user_object_id = ObjectId(user_id)
         other_user_object_id = ObjectId(other_user_id)

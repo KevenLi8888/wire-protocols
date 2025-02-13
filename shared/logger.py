@@ -5,10 +5,12 @@ from config.config import Config
 import traceback
 
 class StackTraceFormatter(logging.Formatter):
+    """Custom formatter that adds stack trace information for error logs"""
     def __init__(self, fmt=None, datefmt=None):
         super().__init__(fmt, datefmt)
     
     def format(self, record):
+        """Format the log record with additional stack trace for errors"""
         formatted = super().format(record)
         if record.levelno == logging.ERROR:
             if record.exc_info:
@@ -21,6 +23,15 @@ class StackTraceFormatter(logging.Formatter):
         return formatted
 
 def setup_logger(name, env='debug'):
+    """Set up a logger with both console and file handlers
+    
+    Args:
+        name (str): Name of the logger
+        env (str): Environment setting ('debug' or other) to determine console log level
+        
+    Returns:
+        logging.Logger: Configured logger instance
+    """
     logger = logging.getLogger(name)
     log_level = logging.DEBUG if env == 'debug' else logging.INFO
     logger.setLevel(logging.DEBUG)  # Set to lowest level to catch all logs

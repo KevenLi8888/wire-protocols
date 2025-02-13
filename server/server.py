@@ -13,6 +13,12 @@ from server.handlers.message_handler import MessageHandler  # Add this import
 
 class TCPServer:
     def __init__(self, config_path):
+        """Initialize TCP Server with configuration
+        
+        Args:
+            config_path: Path to configuration file
+        """
+        # Load configuration and set up logging
         try:
             config = Config.get_instance(config_path)
             env = config.get('env')
@@ -26,7 +32,8 @@ class TCPServer:
             except ValueError as e:
                 self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
                 raise RuntimeError("Server configuration is invalid") from e
-                
+            
+            # Set default values if not configured    
             if not self.host:
                 self.host = '127.0.0.1'
                 self.logger.warning(f"No host configured, using default: {self.host}")
@@ -38,12 +45,15 @@ class TCPServer:
         except Exception as e:
             raise RuntimeError(f"Failed to initialize server: {str(e)}") from e
         
+        # Initialize server components
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.clients = []
-        self.online_users = {}  # {client_socket: username}
+        self.clients = []  # List to track all connected clients
+        self.online_users = {}  # Dictionary to track authenticated users {client_socket: username}
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
-        self.message_handler = MessageHandler(self.logger)  # Add message handler
+        self.message_handler = MessageHandler(self.logger)
+        
+        # Message routing dictionary: maps message types to their handlers and response types
         self.message_handlers = {
             MSG_CREATE_ACCOUNT_REQUEST: (self.user_handler.create_account, MSG_CREATE_ACCOUNT_RESPONSE),
             MSG_LOGIN_REQUEST: (self.user_handler.login, MSG_LOGIN_RESPONSE),
@@ -58,8 +68,8 @@ class TCPServer:
             MSG_DELETE_ACCOUNT_REQUEST: (self.user_handler.delete_user, MSG_DELETE_ACCOUNT_RESPONSE),
         }
 
-    # no need to cover starting code
-    def start(self): # pragma: no cover
+    def start(self):
+        """Start the TCP server and listen for incoming connections"""
         if DatabaseManager.get_instance().db is None:
             self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
@@ -80,10 +90,16 @@ class TCPServer:
             client_thread.start()
 
     def handle_client(self, client_socket, client_address):
+        """Handle individual client connections and message processing
+        
+        Args:
+            client_socket: Socket object for client connection
+            client_address: Address info for connected client
+        """
         while True:
             try:
+                # Receive and process incoming messages
                 data, message_type = self.communication.receive(client_socket)
-                # Check for empty data which indicates client disconnected
                 if not data:
                     self.logger.info(f"Client {client_address} disconnected (connection closed by client)")
                     break
@@ -92,6 +108,7 @@ class TCPServer:
                 self.logger.info(f"Client {client_address} disconnected: {str(e)}")
                 break
             except Exception as e:
+                # Handle unexpected errors and send error response to client
                 self.logger.error(f"Error processing message from {client_address}: {str(e)}", exc_info=True)
                 try:
                     error_response = {"code": ERROR_SERVER_ERROR, "message": MSG_ERROR_RESPONSE}
@@ -104,7 +121,7 @@ class TCPServer:
                     break
                 continue
 
-        # Cleanup code moved outside the try-except block
+        # Cleanup disconnected client
         if client_socket in self.online_users:
             username = self.online_users.pop(client_socket)
             self.logger.info(f"User {username} logged out. Current online users: {list(self.online_users.values())}")
@@ -118,30 +135,42 @@ class TCPServer:
         self.logger.info(f"Client {client_address} connection cleaned up")
 
     def handle_message(self, message_type, data, client_socket):
+        """Process incoming messages and route to appropriate handlers
+        
+        Args:
+            message_type: Type of message received
+            data: Message payload/content
+            client_socket: Socket object for client connection
+            
+        Returns:
+            dict: Response data to be sent back to client
+        """
+        # Validate message type
         if message_type not in self.message_handlers:
             response = {"code": ERROR_INVALID_MESSAGE, "message": MESSAGE_INVALID_MESSAGE}
             self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
         
         try:
+            # Get appropriate handler and response type for the message
             handler_func, response_type = self.message_handlers[message_type]
             response = handler_func(data)
             
-            # 处理登录消息
+            # Handle successful login by updating online users
             if message_type == MSG_LOGIN_REQUEST and response.get('code') == 0:
                 self.online_users[client_socket] = response.get('data').get('user')
                 self.logger.info(f"User {response.get('data').get('user').get('username')} logged in. Current online users: {list(self.online_users.values())}")
             
-            # 处理发送消息
+            # Handle real-time message notifications for online recipients
             elif message_type == MSG_SEND_MESSAGE_REQUEST and response.get('code') == SUCCESS:
                 recipient_id = data['recipient_id']
-                # 查找接收者的socket
+                # Find recipient's socket if they're online
                 recipient_socket = next(
                     (socket for socket, user in self.online_users.items() 
                      if str(user['_id']) == recipient_id), None)
                 
                 if recipient_socket:
-                    # if the recipient is online, notify them
+                    # Notify online recipient of new message
                     self.communication.send(MSG_NEW_MESSAGE_UPDATE, response['data'], recipient_socket)
             
             self.communication.send(response_type, response, client_socket)
@@ -154,8 +183,8 @@ class TCPServer:
             return response
 
     
-    def main(self):  # pragma: no cover
-        """Main function to start the server"""
+    def main(self):
+        """Main function to start the server and handle shutdown"""
         if DatabaseManager.get_instance().db is None:
             self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
