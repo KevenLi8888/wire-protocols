@@ -1,6 +1,8 @@
 # Config files
 config-dev.json
 config.json
+config-server.json
+config-client.json
 
 # Logs
 *.logs
