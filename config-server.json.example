@@ -2,7 +2,7 @@
     "database": {
         "username": "your_username",
         "password": "your_password",
-        "host": "localhost",
+        "host": "database_host",
         "name": "your_database"
     },
     "communication": {
