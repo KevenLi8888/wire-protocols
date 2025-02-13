@@ -14,6 +14,12 @@ from shared.logger import setup_logger  # Updated import
 
 class Client:
     def __init__(self, config_path):
+        """Main client class that handles network communication, GUI, and message handling.
+        Initializes all core components needed for the chat application.
+        
+        Args:
+            config_path (str): Path to the configuration file
+        """
         # Initialize core components
         self._init_config(config_path)
         self._init_network()
@@ -22,7 +28,10 @@ class Client:
         self._setup_callbacks()
 
     def _init_config(self, config_path):
-        """Initialize configuration"""
+        """Initialize configuration from the config file.
+        Sets up logging and loads network configuration settings.
+        Falls back to default values if config is missing.
+        """
         config = Config.get_instance(config_path)  # 移除外层 try-except，让异常直接传播
         env = config.get('env')
         self.logger = setup_logger('client', env)
@@ -39,7 +48,10 @@ class Client:
             self.port = self.port if hasattr(self, 'port') else 13570
 
     def _init_network(self):
-        """Initialize network components"""
+        """Initialize network components.
+        Creates TCP socket and sets up the communication interface
+        for handling protocol-specific message formatting.
+        """
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
 
@@ -54,7 +66,12 @@ class Client:
         self.gui = ChatGUI()
 
     def _setup_callbacks(self):
-        """Set up all callback relationships between components"""
+        """Set up all callback relationships between components.
+        
+        Establishes two main types of callbacks:
+        1. GUI -> Server: User actions that need to be sent to server
+        2. Server -> GUI: Server responses that need to update the GUI
+        """
         # GUI -> Server (User actions)
         self.gui.set_send_callback(self.action_handler.send_chat_message)
         self.gui.set_login_callback(self.action_handler.attempt_login)
@@ -85,7 +102,14 @@ class Client:
 
     # Network operations
     def connect(self) -> bool:
-        """Establish connection to server"""
+        """Establish connection to server.
+        
+        Returns:
+            bool: True if connection successful, False otherwise
+        
+        Handles various connection errors and displays them to the user
+        through the GUI while also logging them.
+        """
         try:
             self.client_socket.connect((self.host, self.port))
             self.logger.info(f"Connected to server {self.host}:{self.port}")
@@ -109,14 +133,22 @@ class Client:
         receive_thread.start()
 
     def send_message(self, message_type: int, data: Dict[str, Any]):
-        """Send message to server"""
+        """Send formatted message to server.
+        
+        Args:
+            message_type (int): Type of message being sent (defined in constants)
+            data (Dict[str, Any]): Message payload containing relevant data
+        """
         try:
             self.communication.send(message_type, data, self.client_socket)
         except Exception as e:
             self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
 
     def receive_messages(self):
-        """Message receiving loop"""
+        """Continuous message receiving loop.
+        Runs in a separate thread to handle incoming messages from server.
+        Passes received messages to the message handler for processing.
+        """
         while True:
             try:
                 data, message_type = self.communication.receive(self.client_socket)
@@ -128,7 +160,12 @@ class Client:
 
     # User management
     def set_current_user(self, user_data):
-        """Update current user after successful login"""
+        """Update current user information after successful login.
+        
+        Args:
+            user_data (dict): User information received from server containing
+                            id, username, and email
+        """
         try:
             self.current_user = User(
                 _id=user_data['_id'],
@@ -141,14 +178,22 @@ class Client:
             self.logger.error(f"Error setting current user: {str(e)}", exc_info=True)
 
     def handle_received_message(self, message_data):
-        """Handle received chat message"""
+        """Process and display received chat messages in the GUI.
+        
+        Args:
+            message_data (dict): Message information including sender, content, etc.
+        """
         try:
             self.gui.display_message(message_data)
         except Exception as e:
             self.logger.error(f"Error handling received message: {str(e)}", exc_info=True)
 
     def update_recent_chats(self, chats_data):
-        """Update GUI with recent chats from server"""
+        """Update the GUI with the list of recent chats.
+        
+        Args:
+            chats_data (dict): Contains 'chats' list and 'total_pages' for pagination
+        """
         try:
             self.gui.update_recent_chats(chats_data['chats'], chats_data['total_pages'])
         except Exception as e:
@@ -156,11 +201,16 @@ class Client:
 
     # Application lifecycle
     def run(self):
+        """Start the client application.
+        Attempts to connect to server and launches GUI if successful.
+        """
         if self.connect():
             self.gui.run()
 
     def main(self): # pragma no cover
-        """Main application entry point"""
+        """Main application entry point.
+        Handles application lifecycle and ensures proper cleanup on exit.
+        """
         try:
             self.run()
         except KeyboardInterrupt:

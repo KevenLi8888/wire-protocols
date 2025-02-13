@@ -4,6 +4,15 @@ from tkinter import ttk, messagebox
 from tkinter.scrolledtext import ScrolledText
 
 class ChatGUI:
+    """Main GUI class for the chat application
+    
+    Handles all UI elements and interactions including:
+    - Login/Registration/Account management
+    - Chat interface and messaging
+    - User search and chat selection
+    - Message history and pagination
+    - Message selection and deletion
+    """
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Chat Application")
@@ -209,15 +218,23 @@ class ChatGUI:
                   command=handle_delete, width=20).grid(row=3, column=0, columnspan=2, pady=20)
 
     def create_chat_window(self):
-        # If chat window exists, destroy it first
+        """Creates the main chat interface
+        
+        Layout:
+        - Left panel: Recent chats list with pagination
+        - Right panel: Message display area and input
+        - Controls for message selection and deletion
+        """
+        
+        # Clear existing chat frame if present
         if self.chat_frame:
             self.chat_frame.destroy()
             
-        # Main chat window
+        # Main chat window setup
         self.chat_frame = ttk.Frame(self.root, padding="10")
         self.chat_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Configure grid weights for resizing
+        # Configure grid weights for proper resizing
         self.chat_frame.grid_columnconfigure(1, weight=1)
         self.chat_frame.grid_rowconfigure(0, weight=1)
 
@@ -431,11 +448,11 @@ class ChatGUI:
             self.load_previous_messages(-1)
 
     def append_message(self, message):
-        """添加消息到显示区域"""
-        self.message_area.configure(state='normal')  # 临时启用编辑
+        """Add message to display area"""
+        self.message_area.configure(state='normal')  # Temporarily enable editing
         self.message_area.insert(tk.END, message + '\n')
-        self.message_area.configure(state='disabled')  # 恢复只读状态
-        self.message_area.see(tk.END)  # 滚动到最新消息
+        self.message_area.configure(state='disabled')  # Restore read-only state
+        self.message_area.see(tk.END)  # Scroll to latest message
 
     def register(self):
         # Create a new registration window
@@ -470,28 +487,28 @@ class ChatGUI:
         ttk.Button(register_window, text="Submit", command=submit_registration).grid(row=3, column=0, columnspan=2, pady=10)
 
     def on_user_select(self, event):
-        """处理用户选择事件"""
-        selected_indices = self.chat_listbox.curselection()  # Changed from user_listbox to chat_listbox
+        """Handle user selection event"""
+        selected_indices = self.chat_listbox.curselection()
         if not selected_indices:
             return
             
-        selected_username = self.chat_listbox.get(selected_indices[0])  # Changed from user_listbox to chat_listbox
+        selected_username = self.chat_listbox.get(selected_indices[0])
         self.current_chat_user = {
             'username': selected_username,
             'id': self.user_map[selected_username]
         }
-        # 更新聊天窗口标题
+        # Update chat window title
         self.root.title(f"Chat with {selected_username}")
 
     def send_message(self):
-        """发送消息"""
+        """Send message"""
         message = self.message_entry.get().strip()
         
         if not message:
             return
             
         if not self.current_chat_user:
-            messagebox.showerror("Error", "请先选择一个聊天对象")
+            messagebox.showerror("Error", "Please select a chat recipient first")
             return
             
         if self.on_message_send:
@@ -503,12 +520,12 @@ class ChatGUI:
             # Message display is now handled after server confirmation
 
     def display_message(self, message_data):
-        """显示消息"""
+        """Display message"""
         try:
             is_self = message_data['sender_id'] == 'self'
             sender_username = "You" if is_self else self.get_username_by_id(message_data['sender_id'])
             
-            # 格式化消息
+            # Format message
             timestamp = message_data.get('timestamp', '')
             if timestamp:
                 timestamp = f"[{timestamp}] "
@@ -517,14 +534,14 @@ class ChatGUI:
                 
             formatted_message = f"{timestamp}{sender_username}: {message_data['content']}"
             
-            # 在消息区域显示消息
+            # Display message in message area
             self.message_area.configure(state='normal')
             self.message_area.insert(tk.END, formatted_message + '\n')
             self.message_area.configure(state='disabled')
-            self.message_area.see(tk.END)  # 滚动到最新消息
+            self.message_area.see(tk.END)  # Scroll to latest message
             
         except Exception as e:
-            messagebox.showerror("Error", f"显示消息时出错: {str(e)}")
+            messagebox.showerror("Error", f"Error displaying message: {str(e)}")
 
     def get_username_by_id(self, user_id):
         """根据用户ID获取用户名"""
@@ -709,16 +726,30 @@ class ChatGUI:
             self.on_previous_messages_request(self.current_chat_user['id'], page)
 
     def update_previous_messages(self, messages, total_pages):
-        """Display previous messages with pagination"""
+        """Displays message history with pagination and selection controls
+        
+        Args:
+            messages: List of message objects containing:
+                - message_id: Unique message identifier
+                - is_from_me: Boolean indicating if user is sender
+                - sender: Dict with username of sender
+                - timestamp: Message timestamp
+                - content: Message text
+            total_pages: Total number of pages in message history
+        """
+        
+        # Clear existing messages and selection state
         self.clear_message_area()
         self.total_messages_pages = total_pages
-         # If page was -1 or 1, set to last page
+        
+        # Handle special case of requesting last page
         if self.current_messages_page < 1:
             self.current_messages_page = total_pages
         
+        # Reset selection tracking
         self.message_checkboxes.clear()
         self.selected_messages.clear()
-        
+
         self.message_area.configure(state='normal')
         
         for message in messages:

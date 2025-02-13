@@ -260,3 +260,116 @@ class TestTCPServer:
         mock_socket.close.assert_called_once()
         # Verify error is correctly logged
         server.logger.error.assert_called()
+
+    def test_server_initialization_with_invalid_config(self, temp_config_file, mock_db_manager, mock_logger):
+        """Test server initialization with invalid configuration"""
+        with patch('server.server.Config') as mock_config, \
+             patch('server.server.setup_logger', return_value=mock_logger), \
+             patch('server.server.UserHandler'), \
+             patch('server.server.MessageHandler'):
+            
+            # Mock Config instance
+            mock_config_instance = MagicMock()
+            mock_config.get_instance.return_value = mock_config_instance
+            
+            # Mock the get method to raise ValueError specifically for host
+            def mock_get(*args):
+                if args == ('communication', 'host'):
+                    raise ValueError("Invalid config")
+                elif args == ('env',):
+                    return 'test'
+                return None
+            
+            mock_config_instance.get.side_effect = mock_get
+            
+            with pytest.raises(RuntimeError) as exc_info:
+                TCPServer(temp_config_file)
+            
+            assert "Server configuration is invalid" in str(exc_info.value)
+            # Verify error was logged with the configuration error
+            mock_logger.error.assert_called_with(
+                "Configuration error: Invalid config",
+                exc_info=True
+            )
+
+    def test_server_initialization_with_missing_values(self, temp_config_file, mock_db_manager, mock_logger):
+        """Test server initialization with missing host and port"""
+        with patch('server.server.Config') as mock_config, \
+             patch('server.server.setup_logger', return_value=mock_logger), \
+             patch('server.server.UserHandler'), \
+             patch('server.server.MessageHandler'):
+            
+            # Mock Config to return None for host and port
+            mock_config.get_instance.return_value.get.side_effect = lambda *args: {
+                ('communication', 'host'): None,
+                ('communication', 'port'): None,
+                ('communication', 'protocol_type'): 'json',
+                'env': 'test'
+            }.get(args, None)
+            
+            server = TCPServer(temp_config_file)
+            
+            # Verify default values are set
+            assert server.host == '127.0.0.1'
+            assert server.port == 13570
+            # Verify warnings were logged
+            mock_logger.warning.assert_any_call("No host configured, using default: 127.0.0.1")
+            mock_logger.warning.assert_any_call("No port configured, using default: 13570")
+
+    def test_server_start_with_database_connection_failure(self, server):
+        """Test server start with database connection failure"""
+        with patch('server.server.DatabaseManager') as mock_db_manager:
+            # Mock database connection failure
+            mock_db_manager.get_instance.return_value.db = None
+            
+            server.start()
+            
+            # Verify error is logged
+            server.logger.error.assert_called_with(
+                "Failed to connect to database. Server shutting down.",
+                exc_info=True
+            )
+
+    def test_server_start_with_socket_bind_error(self, server):
+        """Test server start with socket binding failure"""
+        # Create a new mock socket instead of trying to modify the existing one
+        mock_socket = MagicMock()
+        mock_socket.bind.side_effect = Exception("Bind error")
+        
+        # Replace the server's socket with our mock
+        server.server_socket = mock_socket
+        
+        with pytest.raises(Exception):
+            server.start()
+        
+        # Verify error is logged
+        server.logger.error.assert_called()
+
+    def test_server_main_with_database_failure(self, server):
+        """Test main method with database connection failure"""
+        with patch('server.server.DatabaseManager') as mock_db_manager:
+            # Mock database connection failure
+            mock_db_manager.get_instance.return_value.db = None
+            
+            server.main()
+            
+            # Verify error is logged
+            server.logger.error.assert_called_with(
+                "Failed to connect to database. Server shutting down.",
+                exc_info=True
+            )
+
+    def test_server_main_with_keyboard_interrupt(self, server):
+        """Test main method with keyboard interrupt"""
+        # Create a new mock socket
+        mock_socket = MagicMock()
+        server.server_socket = mock_socket
+        
+        # Mock start method to raise KeyboardInterrupt
+        server.start = MagicMock(side_effect=KeyboardInterrupt)
+        
+        server.main()
+        
+        # Verify shutdown message is logged and socket is closed
+        server.logger.info.assert_called_with("Server shutting down...")
+        mock_socket.close.assert_called_once()
