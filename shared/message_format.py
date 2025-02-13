@@ -74,9 +74,9 @@ class MessageFormat:
                         else:
                             # Ensure the value is encoded to bytes
                             if not isinstance(value, (str, bytes)):
-                            raise ValueError(f"Field '{field_name}' expects string or bytes, got {type(value)}")
+                                raise ValueError(f"Field '{field_name}' expects string or bytes, got {type(value)}")
                         if isinstance(value, str):
-                                value = value.encode('utf-8')
+                            value = value.encode('utf-8')
                             # Add length prefix for strings
                             length = len(value)
                             packed_data += struct.pack('!I', length)  # 4-byte length prefix
