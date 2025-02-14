@@ -87,4 +87,16 @@ python -m client --config config-client.json
 
 [Link to Engineering Notebook](https://kevenli.notion.site/compsci-2620-engineering-notebook-wire-protocol)
 
-Including wire protocol design, database schema, user flow, design choices and other technical details.
+Including the following sections:
+
+[Wire Protocol Design](https://kevenli.notion.site/Wire-Protocol-Design-199b05d7d0e280ddbc22d80cc7cfb27f)
+
+[Database Design](https://kevenli.notion.site/Database-Design-199b05d7d0e280879068feade7a1a143)
+
+[User Flow Design](https://kevenli.notion.site/User-Flow-Design-199b05d7d0e28024981cce65d548f0d2)
+
+[Testing](https://kevenli.notion.site/Testing-199b05d7d0e28041ac00c7795a88497f)
+
+[Thoughts & Future Work](https://kevenli.notion.site/Thoughts-Future-Work-19ab05d7d0e280eaa739e02251d5f17b)
+
+[Generative AI Usage Statement](https://kevenli.notion.site/Generative-AI-Usage-Statement-19ab05d7d0e28067822efc8d5ac476b0)
