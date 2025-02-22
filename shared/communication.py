@@ -5,6 +5,7 @@ from .wire_protocol import WireProtocol
 from .message_format import *
 from .constants import *
 from client.grpc_client import GRPCClient
+from .grpc_handler import GRPCMessageHandler
 
 class CommunicationInterface:
     """Interface for handling network communication using either JSON or wire protocol formats"""
@@ -17,6 +18,7 @@ class CommunicationInterface:
         """
         self.protocol_type = protocol_type
         self.logger = logger
+        self.grpc_handler = GRPCMessageHandler(logger) if protocol_type == 'grpc' else None
         if self.logger:
             self.logger.debug(f"Initialized communication interface with protocol: {protocol_type}")
 
@@ -51,16 +53,7 @@ class CommunicationInterface:
                 self.logger.debug(f"Sending gRPC message type {message_type}: {data}")
                 if not grpc_client:
                     raise ValueError("gRPC client not provided")
-                    
-                if message_type == MSG_CREATE_ACCOUNT_REQUEST:
-                    response = grpc_client.create_account(
-                        data['email'],
-                        data['username'],
-                        data['password']
-                    )
-                    if self.logger:
-                        self.logger.debug(f"gRPC create account response: {response}")
-                    return response
+                return self.grpc_handler.handle_message(message_type, data, grpc_client)
                     
             elif self.protocol_type == 'json':
                 # Encode message as JSON with type and data, prefixed with length
