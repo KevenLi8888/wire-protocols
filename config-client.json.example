@@ -1,8 +1,8 @@
 {
     "communication": {
-        "protocol_type": "json",
+        "protocol_type": "json", // or "wire", "grpc"
         "host": "127.0.0.1",
         "port": 13570
     },
-    "env": "production"
+    "env": "production" // "production" or "debug"
 }

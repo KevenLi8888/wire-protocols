@@ -10,6 +10,7 @@ from shared.constants import *
 from server.handlers.user_handler import UserHandler
 from shared.logger import setup_logger  # Updated import
 from server.handlers.message_handler import MessageHandler  # Add this import
+from server.grpc_server import GRPCServer
 
 class TCPServer:
     def __init__(self, config_path):
@@ -68,26 +69,37 @@ class TCPServer:
             MSG_DELETE_ACCOUNT_REQUEST: (self.user_handler.delete_user, MSG_DELETE_ACCOUNT_RESPONSE),
         }
 
+        if self.protocol_type == 'grpc':
+            self.grpc_server = GRPCServer(self.host, self.port, self.logger)
+
     def start(self):
-        """Start the TCP server and listen for incoming connections"""
+        """Start the appropriate server based on protocol type"""
         if DatabaseManager.get_instance().db is None:
             self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
             return
 
-        try:
-            self.server_socket.bind((self.host, self.port))
-            self.server_socket.listen(5)
-            self.logger.info(f"Server started successfully, listening on {self.host}:{self.port}")
-        except Exception as e:
-            self.logger.error(f"Failed to bind server socket: {str(e)}", exc_info=True)
-            raise
+        if self.protocol_type == 'grpc':
+            try:
+                self.grpc_server.start()
+                self.grpc_server.server.wait_for_termination()
+            except Exception as e:
+                self.logger.error(f"Failed to start gRPC server: {str(e)}", exc_info=True)
+                raise
+        else:
+            try:
+                self.server_socket.bind((self.host, self.port))
+                self.server_socket.listen(5)
+                self.logger.info(f"Server started successfully, listening on {self.host}:{self.port}")
+            except Exception as e:
+                self.logger.error(f"Failed to bind server socket: {str(e)}", exc_info=True)
+                raise
 
-        while True:
-            client_socket, client_address = self.server_socket.accept()
-            self.logger.info(f"New client connected: {client_address}")
-            self.clients.append(client_socket)
-            client_thread = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
-            client_thread.start()
+            while True:
+                client_socket, client_address = self.server_socket.accept()
+                self.logger.info(f"New client connected: {client_address}")
+                self.clients.append(client_socket)
+                client_thread = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
+                client_thread.start()
 
     def handle_client(self, client_socket, client_address):
         """Handle individual client connections and message processing

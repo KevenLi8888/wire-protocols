@@ -27,8 +27,8 @@ class CommunicationConfig:
 
     def __post_init__(self):
         """Validate communication protocol settings including protocol type, port range, and host"""
-        if self.protocol_type not in ['json', 'wire']:
-            raise ValueError("Protocol type must be 'json' or 'wire'")
+        if self.protocol_type not in ['json', 'wire', 'grpc']:
+            raise ValueError("Protocol type must be 'json', 'wire', or 'grpc'")
         if not isinstance(self.port, int) or not (1024 <= self.port <= 65535):
             raise ValueError("Port must be an integer between 1024 and 65535")
         if not self.host:

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package chat;
+
+service ChatService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+}
+
+message CreateAccountRequest {
+  string email = 1;
+  string username = 2;
+  string password = 3;
+}
+
+message CreateAccountResponse {
+  int32 code = 1;
+  string message = 2;
+}

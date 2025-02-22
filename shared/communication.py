@@ -1,9 +1,10 @@
 import json
 import struct
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from .wire_protocol import WireProtocol
 from .message_format import *
-from .constants import MESSAGE_FORMATS
+from .constants import *
+from client.grpc_client import GRPCClient
 
 class CommunicationInterface:
     """Interface for handling network communication using either JSON or wire protocol formats"""
@@ -11,7 +12,7 @@ class CommunicationInterface:
         """Initialize the communication interface
         
         Args:
-            protocol_type (str): Protocol type to use ('json' or wire protocol)
+            protocol_type (str): Protocol type to use ('json', 'wire', or 'grpc')
             logger: Logger instance for debug and error logging
         """
         self.protocol_type = protocol_type
@@ -33,20 +34,35 @@ class CommunicationInterface:
             data.extend(packet)
         return bytes(data)
 
-    def send(self, message_type: int, data: Dict[str, Any], socket) -> None:
-        """Send a message through the specified socket using the configured protocol
+    def send(self, message_type: int, data: Dict[str, Any], socket=None, grpc_client: GRPCClient|None=None) -> Optional[Dict]:
+        """Send a message using the configured protocol
         
         Args:
             message_type (int): Type identifier for the message
             data (Dict[str, Any]): Message data to send
-            socket: Socket connection to send through
+            socket: Socket connection to send through (for TCP protocols)
+            grpc_client: gRPC client instance (for gRPC protocol)
             
-        The method handles two protocols:
-        1. JSON: Messages are sent with a length prefix followed by JSON encoded data
-        2. Wire Protocol: Messages are marshalled according to predefined message formats
+        Returns:
+            Optional[Dict]: Response data for gRPC calls, None for other protocols
         """
         try:
-            if self.protocol_type == 'json':
+            if self.protocol_type == 'grpc':
+                self.logger.debug(f"Sending gRPC message type {message_type}: {data}")
+                if not grpc_client:
+                    raise ValueError("gRPC client not provided")
+                    
+                if message_type == MSG_CREATE_ACCOUNT_REQUEST:
+                    response = grpc_client.create_account(
+                        data['email'],
+                        data['username'],
+                        data['password']
+                    )
+                    if self.logger:
+                        self.logger.debug(f"gRPC create account response: {response}")
+                    return response
+                    
+            elif self.protocol_type == 'json':
                 # Encode message as JSON with type and data, prefixed with length
                 message = json.dumps({'type': message_type, 'data': data}).encode('utf-8')
                 length_prefix = struct.pack('!I', len(message))  # Network byte order (big-endian)
@@ -68,6 +84,7 @@ class CommunicationInterface:
         except Exception as e:
             if self.logger:
                 self.logger.error(f"Error sending message: {str(e)}, data: {data}", exc_info=True)
+            raise
 
     def receive(self, socket) -> Tuple[Dict[str, Any], int]:
         """Receive a message from the specified socket using the configured protocol

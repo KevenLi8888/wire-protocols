@@ -11,6 +11,7 @@ from client.handlers.user_action_handler import UserActionHandler  # Updated imp
 from config.config import Config
 from client.tk_gui import ChatGUI
 from shared.logger import setup_logger  # Updated import
+from client.grpc_client import GRPCClient
 
 class Client:
     def __init__(self, config_path):
@@ -32,7 +33,7 @@ class Client:
         Sets up logging and loads network configuration settings.
         Falls back to default values if config is missing.
         """
-        config = Config.get_instance(config_path)  # 移除外层 try-except，让异常直接传播
+        config = Config.get_instance(config_path)
         env = config.get('env')
         self.logger = setup_logger('client', env)
         
@@ -48,11 +49,13 @@ class Client:
             self.port = self.port if hasattr(self, 'port') else 13570
 
     def _init_network(self):
-        """Initialize network components.
-        Creates TCP socket and sets up the communication interface
-        for handling protocol-specific message formatting.
-        """
-        self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        """Initialize network components based on protocol type"""
+        self.client_socket = None
+        self.grpc_client = None
+        if self.protocol_type == 'grpc':
+            self.grpc_client = GRPCClient(self.host, self.port, self.logger)
+        else:
+            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
 
     def _init_handlers(self):
@@ -102,24 +105,23 @@ class Client:
 
     # Network operations
     def connect(self) -> bool:
-        """Establish connection to server.
-        
-        Returns:
-            bool: True if connection successful, False otherwise
-        
-        Handles various connection errors and displays them to the user
-        through the GUI while also logging them.
-        """
+        """Establish connection to server based on protocol type"""
         try:
-            self.client_socket.connect((self.host, self.port))
-            self.logger.info(f"Connected to server {self.host}:{self.port}")
-            self._start_receive_thread()
-            return True
-        except ConnectionRefusedError as e:
-            error_msg = f"Connection refused: {str(e)}"
-            self.logger.error(error_msg, exc_info=True)
-            self.gui.show_error(error_msg)
-            return False
+            if self.protocol_type == 'grpc':
+                # gRPC connection is handled by the communication interface
+                return True
+            else:
+                # ...existing TCP connection code...
+                try:
+                    self.client_socket.connect((self.host, self.port))
+                    self.logger.info(f"Connected to server {self.host}:{self.port}")
+                    self._start_receive_thread()
+                    return True
+                except ConnectionRefusedError as e:
+                    error_msg = f"Connection refused: {str(e)}"
+                    self.logger.error(error_msg, exc_info=True)
+                    self.gui.show_error(error_msg)
+                    return False
         except Exception as e:
             error_msg = f"Connection failed: {str(e)}"
             self.logger.error(error_msg, exc_info=True)
@@ -140,7 +142,10 @@ class Client:
             data (Dict[str, Any]): Message payload containing relevant data
         """
         try:
-            self.communication.send(message_type, data, self.client_socket)
+            response = self.communication.send(message_type, data, self.client_socket, self.grpc_client)
+            if response and self.protocol_type == 'grpc':
+                # Handle gRPC response directly since there's no receive loop
+                self.message_handler.handle_message(message_type + 1, response)
         except Exception as e:
             self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
 
