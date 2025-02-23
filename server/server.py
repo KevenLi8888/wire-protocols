@@ -12,7 +12,7 @@ from shared.logger import setup_logger  # Updated import
 from server.handlers.message_handler import MessageHandler  # Add this import
 from server.grpc_server import GRPCServer
 
-class TCPServer:
+class Server:
     def __init__(self, config_path):
         """Initialize TCP Server with configuration
         

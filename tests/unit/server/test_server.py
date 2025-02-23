@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from server.server import TCPServer
+from server.server import Server
 from shared.constants import *
 
 class TestTCPServer:
@@ -33,7 +33,7 @@ class TestTCPServer:
             mock_user_handler.return_value = mock_user_handler_instance
             mock_message_handler.return_value = mock_message_handler_instance
             
-            server = TCPServer(temp_config_file)
+            server = Server(temp_config_file)
             return server
 
     def test_server_initialization(self, server):
@@ -283,7 +283,7 @@ class TestTCPServer:
             mock_config_instance.get.side_effect = mock_get
             
             with pytest.raises(RuntimeError) as exc_info:
-                TCPServer(temp_config_file)
+                Server(temp_config_file)
             
             assert "Server configuration is invalid" in str(exc_info.value)
             # Verify error was logged with the configuration error
@@ -307,7 +307,7 @@ class TestTCPServer:
                 'env': 'test'
             }.get(args, None)
             
-            server = TCPServer(temp_config_file)
+            server = Server(temp_config_file)
             
             # Verify default values are set
             assert server.host == '127.0.0.1'
