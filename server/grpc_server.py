@@ -22,7 +22,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                 code=result['code'],
                 message=result.get('message', MESSAGE_OK)
             )
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in CreateAccount: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -62,7 +62,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                 code=result['code'],
                 message=result.get('message', MESSAGE_OK)
             )
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in DeleteAccount: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -87,7 +87,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     total_pages=result['data']['total_pages']
                 )
             return chat_pb2.SearchUsersResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in SearchUsers: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -114,7 +114,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     )
                 )
             return chat_pb2.SendMessageResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in SendMessage: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -144,7 +144,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     total_pages=result['data']['total_pages']
                 )
             return chat_pb2.GetRecentChatsResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in GetRecentChats: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -176,7 +176,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     total_pages=result['data']['total_pages']
                 )
             return chat_pb2.GetPreviousMessagesResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in GetPreviousMessages: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -197,7 +197,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     count=result['data']['count']
                 )
             return chat_pb2.GetChatUnreadCountResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in GetChatUnreadCount: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -225,7 +225,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     ) for msg in result['data']['messages']]
                 )
             return chat_pb2.GetUnreadMessagesResponse(code=result['code'], message=result['message'])
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in GetUnreadMessages: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -240,7 +240,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                 code=result['code'],
                 message=result.get('message', MESSAGE_OK)
             )
-        except Exception as e:  # pragma: no cover
+        except Exception as e:  
             self.logger.error(f"Error in DeleteMessages: {str(e)}")
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(str(e))
@@ -259,3 +259,7 @@ class GRPCServer:
         self.server.add_insecure_port(f'{self.host}:{self.port}')
         self.server.start()
         self.logger.info(f"gRPC server started on {self.host}:{self.port}")
+        
+    def stop(self, grace=None):
+        self.server.stop(grace)
+        self.logger.info("gRPC server stopped")

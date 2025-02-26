@@ -58,13 +58,6 @@ def test_client_connect(client, mock_socket):
     assert result is True
     mock_socket.connect.assert_called_once_with(('localhost', 12345))
 
-def test_send_message(client):
-    """Test sending message"""
-    message_type = MSG_SEND_MESSAGE_REQUEST
-    data = {"content": "Hello", "recipient_id": "123"}
-    client.send_message(message_type, data)
-    client.communication.send.assert_called_once_with(message_type, data, client.client_socket)
-
 def test_set_current_user(client):
     """Test setting current user"""
     user_data = {

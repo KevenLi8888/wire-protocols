@@ -373,3 +373,142 @@ class TestTCPServer:
         # Verify shutdown message is logged and socket is closed
         server.logger.info.assert_called_with("Server shutting down...")
         mock_socket.close.assert_called_once()
+
+    def test_handle_message_with_grpc_protocol(self, server, mock_socket):
+        """Test handling messages with gRPC protocol"""
+        # Set protocol type to gRPC
+        server.protocol_type = 'grpc'
+        server.grpc_server = MagicMock()
+        
+        # Test with invalid message type
+        invalid_message_type = "INVALID_MESSAGE_TYPE"
+        data = {"some": "data"}
+        
+        response = server.handle_message(invalid_message_type, data, mock_socket)
+        
+        assert response['code'] == ERROR_INVALID_MESSAGE
+        assert response['message'] == MESSAGE_INVALID_MESSAGE
+
+    def test_server_start_with_grpc(self, server):
+        """Test server start with gRPC protocol"""
+        # Set protocol type to gRPC
+        server.protocol_type = 'grpc'
+        server.grpc_server = MagicMock()
+        
+        # Mock database connection
+        with patch('server.server.DatabaseManager') as mock_db_manager:
+            mock_db_manager.get_instance.return_value.db = MagicMock()
+            
+            # Call start method
+            server.start()
+            
+            # Verify gRPC server was started
+            server.grpc_server.start.assert_called_once()
+            server.grpc_server.server.wait_for_termination.assert_called_once()
+
+    def test_server_start_with_grpc_error(self, server):
+        """Test server start with gRPC error"""
+        # Set protocol type to gRPC
+        server.protocol_type = 'grpc'
+        server.grpc_server = MagicMock()
+        server.grpc_server.start.side_effect = Exception("gRPC server error")
+        
+        # Mock database connection
+        with patch('server.server.DatabaseManager') as mock_db_manager:
+            mock_db_manager.get_instance.return_value.db = MagicMock()
+            
+            # Call start method and expect exception
+            with pytest.raises(Exception) as exc_info:
+                server.start()
+            
+            assert "gRPC server error" in str(exc_info.value)
+            server.logger.error.assert_called()
+
+    def test_handle_client_with_error_sending_error_response(self, server, mock_socket):
+        """Test handle_client when error occurs sending error response"""
+        # Set mock data
+        server.communication = MagicMock()
+        # First return data triggers error, second return None indicates client disconnection
+        server.communication.receive.side_effect = [
+            ({"data": "test"}, "test_type"),
+            (None, None)
+        ]
+        # Mock handle_message to raise exception
+        server.handle_message = MagicMock(side_effect=Exception("Test error"))
+        # Mock communication.send to raise exception when sending error response
+        server.communication.send.side_effect = Exception("Error sending response")
+        
+        server.clients.append(mock_socket)
+        
+        # Execute test
+        server.handle_client(mock_socket, ('127.0.0.1', 12345))
+        
+        # Verify result
+        assert mock_socket not in server.clients
+        mock_socket.close.assert_called_once()
+        # Verify both errors are logged
+        server.logger.error.assert_any_call(
+            "Error processing message from ('127.0.0.1', 12345): Test error", 
+            exc_info=True
+        )
+        server.logger.error.assert_any_call(
+            "Error sending error response to ('127.0.0.1', 12345): Error sending response", 
+            exc_info=True
+        )
+
+    def test_server_initialization_with_grpc(self, temp_config_file, mock_db_manager, mock_logger):
+        """Test server initialization with gRPC protocol"""
+        with patch('server.server.Config') as mock_config, \
+             patch('server.server.setup_logger', return_value=mock_logger), \
+             patch('server.server.UserHandler'), \
+             patch('server.server.MessageHandler'), \
+             patch('server.server.GRPCServer') as mock_grpc_server:
+            
+            # Mock Config to return gRPC for protocol_type
+            mock_config.get_instance.return_value.get.side_effect = lambda *args: {
+                ('communication', 'host'): '127.0.0.1',
+                ('communication', 'port'): 13570,
+                ('communication', 'protocol_type'): 'grpc',
+                'env': 'test'
+            }.get(args, None)
+            
+            # Create server instance
+            server = Server(temp_config_file)
+            
+            # Verify gRPC server was initialized
+            assert server.protocol_type == 'grpc'
+            mock_grpc_server.assert_called_once_with('127.0.0.1', 13570, mock_logger)
+            assert hasattr(server, 'grpc_server')
+
+    def test_server_initialization_exception(self, temp_config_file, mock_db_manager, mock_logger):
+        """Test server initialization with unexpected exception"""
+        with patch('server.server.Config') as mock_config, \
+             patch('server.server.setup_logger', return_value=mock_logger):
+            
+            # Mock Config to raise an unexpected exception
+            mock_config.get_instance.side_effect = Exception("Unexpected config error")
+            
+            # Verify initialization raises RuntimeError
+            with pytest.raises(RuntimeError) as exc_info:
+                Server(temp_config_file)
+            
+            assert "Failed to initialize server" in str(exc_info.value)
+            assert "Unexpected config error" in str(exc_info.value)
+
+    def test_server_main_with_exception(self, server):
+        """Test main method with unexpected exception"""
+        # Create a new mock socket
+        mock_socket = MagicMock()
+        server.server_socket = mock_socket
+        
+        # Mock start method to raise an unexpected exception
+        server.start = MagicMock(side_effect=Exception("Unexpected server error"))
+        
+        server.main()
+        
+        # Verify error is logged and socket is closed
+        server.logger.error.assert_called_with(
+            "Server error: Unexpected server error",
+            exc_info=True
+        )
+        mock_socket.close.assert_called_once()

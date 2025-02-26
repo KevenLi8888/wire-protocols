@@ -11,6 +11,7 @@ def grpc_client(mock_logger):
         yield client
 
 def test_create_account_success(grpc_client):
+    """Test successful account creation"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -27,6 +28,7 @@ def test_create_account_success(grpc_client):
     }
 
 def test_create_account_failure(grpc_client):
+    """Test account creation with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"  # Override __str__ method
@@ -39,6 +41,7 @@ def test_create_account_failure(grpc_client):
     assert result['code'] == -1
 
 def test_login_success(grpc_client):
+    """Test successful user login"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -65,6 +68,7 @@ def test_login_success(grpc_client):
     }
 
 def test_login_failure(grpc_client):
+    """Test login with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -78,6 +82,7 @@ def test_login_failure(grpc_client):
     # assert result['message'] == "Connection failed"
 
 def test_login_error_response(grpc_client):
+    """Test login with invalid credentials"""
     # Setup mock response with error
     mock_response = MagicMock()
     mock_response.code = 1
@@ -94,6 +99,7 @@ def test_login_error_response(grpc_client):
     }
 
 def test_send_message_success(grpc_client):
+    """Test successful message sending"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -122,6 +128,7 @@ def test_send_message_success(grpc_client):
     }
 
 def test_send_message_failure(grpc_client):
+    """Test message sending with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -151,6 +158,7 @@ def test_send_message_error_response(grpc_client):
     }
 
 def test_search_users_success(grpc_client):
+    """Test successful user search"""
     # Setup mock response
     mock_user = MagicMock()
     mock_user.id = "user123"
@@ -182,6 +190,7 @@ def test_search_users_success(grpc_client):
     }
 
 def test_search_users_failure(grpc_client):
+    """Test user search with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -211,6 +220,7 @@ def test_search_users_error_response(grpc_client):
     }
 
 def test_get_recent_chats_success(grpc_client):
+    """Test successful retrieval of recent chats"""
     # Setup mock response
     mock_chat = MagicMock()
     mock_chat.user_id = "user123"
@@ -250,6 +260,7 @@ def test_get_recent_chats_success(grpc_client):
     }
 
 def test_get_recent_chats_error_response(grpc_client):
+    """Test retrieval of recent chats with connection failure"""
     # Setup mock response with error
     mock_response = MagicMock()
     mock_response.code = 1
@@ -266,6 +277,7 @@ def test_get_recent_chats_error_response(grpc_client):
     }
 
 def test_delete_account_success(grpc_client):
+    """Test successful account deletion"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -282,6 +294,7 @@ def test_delete_account_success(grpc_client):
     }
 
 def test_get_previous_messages_success(grpc_client):
+    """Test successful retrieval of previous messages"""
     # Setup mock response
     mock_message = MagicMock()
     mock_message.message_id = "msg123"
@@ -325,6 +338,7 @@ def test_get_previous_messages_success(grpc_client):
     }
 
 def test_get_previous_messages_failure(grpc_client):
+    """Test retrieval of previous messages with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -354,6 +368,7 @@ def test_get_previous_messages_error_response(grpc_client):
     }
 
 def test_get_chat_unread_count_success(grpc_client):
+    """Test successful retrieval of unread message count"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -378,6 +393,7 @@ def test_get_chat_unread_count_success(grpc_client):
     }
 
 def test_get_chat_unread_count_failure(grpc_client):
+    """Test retrieval of unread message count with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -391,6 +407,7 @@ def test_get_chat_unread_count_failure(grpc_client):
     # assert result['message'] == "Connection failed"
 
 def test_get_chat_unread_count_error_response(grpc_client):
+    """Test retrieval of unread message count with error"""
     # Setup mock response with error
     mock_response = MagicMock()
     mock_response.code = 1
@@ -407,6 +424,7 @@ def test_get_chat_unread_count_error_response(grpc_client):
     }
 
 def test_get_unread_messages_success(grpc_client):
+    """Test successful retrieval of unread messages"""
     # Setup mock response
     mock_message = MagicMock()
     mock_message.message_id = "msg123"
@@ -444,6 +462,7 @@ def test_get_unread_messages_success(grpc_client):
     }
 
 def test_get_unread_messages_failure(grpc_client):
+    """Test retrieval of unread messages with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"
@@ -457,6 +476,7 @@ def test_get_unread_messages_failure(grpc_client):
     #assert result['message'] == "Connection failed"
 
 def test_get_unread_messages_error_response(grpc_client):
+    """Test retrieval of unread messages with error"""
     # Setup mock response with error
     mock_response = MagicMock()
     mock_response.code = 1
@@ -473,6 +493,7 @@ def test_get_unread_messages_error_response(grpc_client):
     }
 
 def test_delete_messages_success(grpc_client):
+    """Test successful deletion of messages"""
     # Setup mock response
     mock_response = MagicMock()
     mock_response.code = 0
@@ -489,6 +510,7 @@ def test_delete_messages_success(grpc_client):
     }
 
 def test_delete_account_failure(grpc_client):
+    """Test account deletion with connection failure"""
     # Setup mock error
     mock_error = grpc.RpcError()
     mock_error.__str__ = lambda _: "Connection failed"

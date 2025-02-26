@@ -276,28 +276,6 @@ def test_wire_protocol_receive_general_exception(mock_socket, mock_logger):
     assert msg_type == -1
     assert received_data == {}
 
-def test_json_protocol_send_general_exception(mock_socket, mock_logger):
-    """Test JSON protocol send with a general exception"""
-    comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
-    
-    # Create data that can't be JSON serialized
-    test_data = {"key": object()}  # object() can't be JSON serialized
-    
-    comm.send(1, test_data, mock_socket)
-    # Should log error but not raise exception
-
-def test_wire_protocol_send_invalid_message_format(mock_socket, mock_logger):
-    """Test wire protocol send with invalid message format"""
-    comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
-    
-    # Send data that doesn't match any message format
-    test_data = {
-        "invalid_field": "value"
-    }
-    
-    comm.send(999, test_data, mock_socket)  # Using invalid message type
-    # Should log error but not raise exception 
-
 def test_json_protocol_receive_null_message_after_length(mock_socket, mock_logger):
     """Test JSON protocol receive when message body is null after receiving length"""
     comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
@@ -374,4 +352,192 @@ def test_json_protocol_receive_with_logging_error(mock_socket, mock_logger):
     
     received_data, msg_type = comm.receive(mock_socket)
     assert msg_type == 1
-    assert received_data == test_data 
+    assert received_data == test_data
+
+def test_grpc_protocol_initialization(mock_logger):
+    """Test initialization of gRPC protocol"""
+    comm = CommunicationInterface(protocol_type='grpc', logger=mock_logger)
+    assert comm.protocol_type == 'grpc'
+    assert comm.grpc_handler is not None
+
+def test_grpc_protocol_send_missing_client(mock_logger):
+    """Test sending gRPC message without providing a client"""
+    comm = CommunicationInterface(protocol_type='grpc', logger=mock_logger)
+    test_data = {"username": "test"}
+    
+    with pytest.raises(ValueError, match="gRPC client not provided"):
+        comm.send(1, test_data)
+
+def test_grpc_protocol_send_with_client(mock_logger, mocker):
+    """Test sending gRPC message with a client"""
+    comm = CommunicationInterface(protocol_type='grpc', logger=mock_logger)
+    test_data = {"username": "test"}
+    
+    # Mock the gRPC client and handler
+    mock_grpc_client = mocker.Mock()
+    mock_response = {"status": "success"}
+    mocker.patch.object(comm.grpc_handler, 'handle_message', return_value=mock_response)
+    
+    response = comm.send(1, test_data, grpc_client=mock_grpc_client)
+    
+    # Verify the handler was called with correct arguments
+    comm.grpc_handler.handle_message.assert_called_once_with(1, test_data, mock_grpc_client)
+    assert response == mock_response
+
+def test_json_protocol_send_exception(mock_socket, mock_logger):
+    """Test exception handling when sending JSON protocol message"""
+    comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
+    test_data = {"username": "test"}
+    
+    # Make sendall raise an exception
+    def mock_sendall(data):
+        raise ConnectionError("Simulated connection error")
+    mock_socket.sendall = mock_sendall
+    
+    with pytest.raises(ConnectionError):
+        comm.send(1, test_data, mock_socket)
+
+def test_wire_protocol_send_exception(mock_socket, mock_logger):
+    """Test exception handling when sending wire protocol message"""
+    comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
+    test_data = {"username": "test", "password": "123"}
+    
+    # Make sendall raise an exception
+    def mock_sendall(data):
+        raise ConnectionError("Simulated connection error")
+    mock_socket.sendall = mock_sendall
+    
+    with pytest.raises(ConnectionError):
+        comm.send(1, test_data, mock_socket)
+
+def test_json_protocol_receive_partial_length(mock_socket, mock_logger):
+    """Test JSON protocol receive with partial length prefix"""
+    comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
+    
+    # Mock recv to return partial data then None (connection closed)
+    call_count = 0
+    def mock_recv(n):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return b'\x00\x00'  # Partial length prefix
+        return None  # Connection closed
+    mock_socket.recv = mock_recv
+    
+    received_data, msg_type = comm.receive(mock_socket)
+    assert msg_type == -1
+    assert received_data == {}
+
+def test_json_protocol_receive_partial_message(mock_socket, mock_logger):
+    """Test JSON protocol receive with partial message body"""
+    comm = CommunicationInterface(protocol_type='json', logger=mock_logger)
+    
+    # First return valid length prefix for a 10-byte message
+    length_prefix = struct.pack('!I', 10)
+    
+    # Then return partial message followed by None (connection closed)
+    call_count = 0
+    def mock_recv(n):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return length_prefix
+        if call_count == 2:
+            return b'{"type":1'  # Partial JSON
+        return None  # Connection closed
+    mock_socket.recv = mock_recv
+    
+    received_data, msg_type = comm.receive(mock_socket)
+    assert msg_type == -1
+    assert received_data == {}
+
+def test_wire_protocol_receive_partial_header(mock_socket, mock_logger):
+    """Test wire protocol receive with partial header"""
+    comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
+    
+    # Mock recv to return partial header then None (connection closed)
+    call_count = 0
+    def mock_recv(n):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return b'\x01\x02\x03'  # Partial header (less than HEADER_SIZE)
+        return None  # Connection closed
+    mock_socket.recv = mock_recv
+    
+    received_data, msg_type = comm.receive(mock_socket)
+    assert msg_type == -1
+    assert received_data == {}
+
+def test_wire_protocol_receive_partial_body(mock_socket, mock_logger):
+    """Test wire protocol receive with partial message body"""
+    comm = CommunicationInterface(protocol_type='wire', logger=mock_logger)
+    
+    # Create a valid header for a message with length 10
+    header = WireProtocol.create_header(message_type=2, length=10)
+    
+    # Mock recv to return valid header but partial body
+    call_count = 0
+    def mock_recv(n):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return header
+        if call_count == 2:
+            return b'partial'  # Partial body (less than expected length)
+        return None  # Connection closed
+    mock_socket.recv = mock_recv
+    
+    received_data, msg_type = comm.receive(mock_socket)
+    assert msg_type == -1
+    assert received_data == {}
+
+def test_grpc_protocol_send_exception(mock_logger, mocker):
+    """Test exception handling when sending gRPC message"""
+    # Create a mock logger instead of using the fixture
+    mock_logger = mocker.Mock()
+    comm = CommunicationInterface(protocol_type='grpc', logger=mock_logger)
+    test_data = {"username": "test"}
+    
+    # Mock the gRPC handler to raise an exception
+    mock_grpc_client = mocker.Mock()
+    mocker.patch.object(comm.grpc_handler, 'handle_message', 
+                        side_effect=Exception("Simulated gRPC error"))
+    
+    # Test that the exception is re-raised
+    with pytest.raises(Exception):
+        comm.send(1, test_data, grpc_client=mock_grpc_client)
+    
+    # Verify the logger was called with an error message
+    mock_logger.error.assert_called()
+
+def test_grpc_protocol_send_without_logger(mocker):
+    """Test sending gRPC message without a logger"""
+    comm = CommunicationInterface(protocol_type='grpc', logger=None)
+    test_data = {"username": "test"}
+    
+    # Mock the gRPC handler to raise an exception
+    mock_grpc_client = mocker.Mock()
+    mocker.patch.object(comm.grpc_handler, 'handle_message', 
+                        side_effect=Exception("Simulated gRPC error"))
+    
+    # Test that the exception is re-raised even without a logger
+    with pytest.raises(Exception):
+        comm.send(1, test_data, grpc_client=mock_grpc_client)
+
+def test_grpc_protocol_send_debug_logging(mock_logger, mocker):
+    """Test debug logging when sending gRPC message"""
+    # Create a mock logger instead of using the fixture
+    mock_logger = mocker.Mock()
+    comm = CommunicationInterface(protocol_type='grpc', logger=mock_logger)
+    test_data = {"username": "test"}
+    
+    # Mock the gRPC client and handler
+    mock_grpc_client = mocker.Mock()
+    mock_response = {"status": "success"}
+    mocker.patch.object(comm.grpc_handler, 'handle_message', return_value=mock_response)
+    
+    comm.send(1, test_data, grpc_client=mock_grpc_client)
+    
+    # Verify debug logging was called
+    mock_logger.debug.assert_called_with(f"Sending gRPC message type 1: {test_data}") 
