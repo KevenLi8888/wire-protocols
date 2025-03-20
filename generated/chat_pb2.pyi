@@ -294,3 +294,41 @@ class GetUnreadMessagesResponse(_message.Message):
     message: str
     messages: _containers.RepeatedCompositeFieldContainer[UnreadMessage]
     def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[UnreadMessage, _Mapping]]] = ...) -> None: ...
+
+class ElectionRequest(_message.Message):
+    __slots__ = ("server_id",)
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+    server_id: str
+    def __init__(self, server_id: _Optional[str] = ...) -> None: ...
+
+class ElectionResponse(_message.Message):
+    __slots__ = ("acknowledged",)
+    ACKNOWLEDGED_FIELD_NUMBER: _ClassVar[int]
+    acknowledged: bool
+    def __init__(self, acknowledged: bool = ...) -> None: ...
+
+class CoordinatorRequest(_message.Message):
+    __slots__ = ("server_id",)
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+    server_id: str
+    def __init__(self, server_id: _Optional[str] = ...) -> None: ...
+
+class CoordinatorResponse(_message.Message):
+    __slots__ = ("acknowledged",)
+    ACKNOWLEDGED_FIELD_NUMBER: _ClassVar[int]
+    acknowledged: bool
+    def __init__(self, acknowledged: bool = ...) -> None: ...
+
+class HeartbeatRequest(_message.Message):
+    __slots__ = ("server_id",)
+    SERVER_ID_FIELD_NUMBER: _ClassVar[int]
+    server_id: str
+    def __init__(self, server_id: _Optional[str] = ...) -> None: ...
+
+class HeartbeatResponse(_message.Message):
+    __slots__ = ("is_alive", "is_leader")
+    IS_ALIVE_FIELD_NUMBER: _ClassVar[int]
+    IS_LEADER_FIELD_NUMBER: _ClassVar[int]
+    is_alive: bool
+    is_leader: bool
+    def __init__(self, is_alive: bool = ..., is_leader: bool = ...) -> None: ...

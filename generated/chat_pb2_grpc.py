@@ -525,3 +525,167 @@ class ChatService(object):
             timeout,
             metadata,
             _registered_method=True)
+
+
+class LeaderElectionServiceStub(object):
+    """New service for leader election
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Election = channel.unary_unary(
+                '/chat.LeaderElectionService/Election',
+                request_serializer=generated_dot_chat__pb2.ElectionRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.ElectionResponse.FromString,
+                _registered_method=True)
+        self.Coordinator = channel.unary_unary(
+                '/chat.LeaderElectionService/Coordinator',
+                request_serializer=generated_dot_chat__pb2.CoordinatorRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.CoordinatorResponse.FromString,
+                _registered_method=True)
+        self.Heartbeat = channel.unary_unary(
+                '/chat.LeaderElectionService/Heartbeat',
+                request_serializer=generated_dot_chat__pb2.HeartbeatRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.HeartbeatResponse.FromString,
+                _registered_method=True)
+
+
+class LeaderElectionServiceServicer(object):
+    """New service for leader election
+    """
+
+    def Election(self, request, context):
+        """Send election message to initiate or participate in election
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Coordinator(self, request, context):
+        """Notify others that this node is the leader
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Heartbeat(self, request, context):
+        """Check if a node is alive
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_LeaderElectionServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Election': grpc.unary_unary_rpc_method_handler(
+                    servicer.Election,
+                    request_deserializer=generated_dot_chat__pb2.ElectionRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.ElectionResponse.SerializeToString,
+            ),
+            'Coordinator': grpc.unary_unary_rpc_method_handler(
+                    servicer.Coordinator,
+                    request_deserializer=generated_dot_chat__pb2.CoordinatorRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.CoordinatorResponse.SerializeToString,
+            ),
+            'Heartbeat': grpc.unary_unary_rpc_method_handler(
+                    servicer.Heartbeat,
+                    request_deserializer=generated_dot_chat__pb2.HeartbeatRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.HeartbeatResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'chat.LeaderElectionService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('chat.LeaderElectionService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class LeaderElectionService(object):
+    """New service for leader election
+    """
+
+    @staticmethod
+    def Election(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.LeaderElectionService/Election',
+            generated_dot_chat__pb2.ElectionRequest.SerializeToString,
+            generated_dot_chat__pb2.ElectionResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Coordinator(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.LeaderElectionService/Coordinator',
+            generated_dot_chat__pb2.CoordinatorRequest.SerializeToString,
+            generated_dot_chat__pb2.CoordinatorResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Heartbeat(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.LeaderElectionService/Heartbeat',
+            generated_dot_chat__pb2.HeartbeatRequest.SerializeToString,
+            generated_dot_chat__pb2.HeartbeatResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

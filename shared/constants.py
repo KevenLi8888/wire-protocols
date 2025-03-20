@@ -33,6 +33,10 @@ ERROR_INVALID_CREDENTIALS = -3
 ERROR_USER_NOT_FOUND = -4
 ERROR_SERVER_ERROR = -500
 
+# Server initialization and leadership error codes
+ERROR_SERVER_INITIALIZING = -501
+ERROR_NOT_LEADER = -502
+
 # Messages
 MESSAGE_OK = "OK"
 MESSAGE_INVALID_MESSAGE = "Invalid message type"
@@ -40,6 +44,10 @@ MESSAGE_USER_EXISTS = "User already exists"
 MESSAGE_INVALID_CREDENTIALS = "Invalid credentials"
 MESSAGE_USER_NOT_FOUND = "User not found"
 MESSAGE_SERVER_ERROR = "Internal server error"
+
+# Server initialization and leadership error messages
+MESSAGE_SERVER_INITIALIZING = "Server is still initializing, please try again later"
+MESSAGE_NOT_LEADER = "This server is not the leader, please connect to the leader server"
 
 # Message Format Mapping
 # Message Types -> Message Formats (see shared/message_format.py)

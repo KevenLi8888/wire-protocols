@@ -2,15 +2,20 @@ import socket
 import threading
 import argparse
 import logging
-from database.collections import UsersCollection
+import time
+import grpc
+from datetime import datetime
+from database.collections import UsersCollection, ServersCollection
 from database.connection import DatabaseManager
 from config.config import Config
 from shared.communication import CommunicationInterface
 from shared.constants import *
 from server.handlers.user_handler import UserHandler
-from shared.logger import setup_logger  # Updated import
-from server.handlers.message_handler import MessageHandler  # Add this import
+from shared.logger import setup_logger
+from server.handlers.message_handler import MessageHandler
 from server.grpc_server import GRPCServer
+from shared.models import Server as ServerModel
+from generated import chat_pb2, chat_pb2_grpc
 
 class Server:
     def __init__(self, config_path):
@@ -19,32 +24,43 @@ class Server:
         Args:
             config_path: Path to configuration file
         """
+        # Add timeout constants near the top of the class
+        self.ELECTION_TIMEOUT = 10  # seconds
+        self.COORDINATOR_TIMEOUT = 10  # seconds
+        self.HEARTBEAT_TIMEOUT = 8  # seconds
+
+        # Initialize server state
+        self.initialization_complete = False
+        
         # Load configuration and set up logging
         try:
             config = Config.get_instance(config_path)
             env = config.get('env')
-            self.logger = setup_logger('server', env)
+            self.server_id = config.get('server', 'id')
+            self.logger = setup_logger('server-'+self.server_id, env)
             
             # Get configuration with error handling
-            try:
-                self.host = config.get('communication', 'host')
-                self.port = config.get('communication', 'port')
-                self.protocol_type = config.get('communication', 'protocol_type')
+            try:              
+                # Server configuration
+                self.host = config.get('server', 'host')
+                self.port = config.get('server', 'port')
+                self.protocol_type = config.get('server', 'protocol_type')
+                
+                # Registry configuration
+                self.registry_host = config.get('registry', 'host')
+                self.registry_username = config.get('registry', 'username')
+                self.registry_password = config.get('registry', 'password')
+                self.registry_name = config.get('registry', 'name')
+                
             except ValueError as e:
                 self.logger.error(f"Configuration error: {str(e)}", exc_info=True)
                 raise RuntimeError("Server configuration is invalid") from e
             
-            # Set default values if not configured    
-            if not self.host:
-                self.host = '127.0.0.1'
-                self.logger.warning(f"No host configured, using default: {self.host}")
-            
-            if not self.port:
-                self.port = 13570
-                self.logger.warning(f"No port configured, using default: {self.port}")
-            
         except Exception as e:
             raise RuntimeError(f"Failed to initialize server: {str(e)}") from e
+        
+        # Initialize database connections
+        self._init_database_connections()
         
         # Initialize server components
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -53,6 +69,12 @@ class Server:
         self.communication = CommunicationInterface(self.protocol_type, self.logger)
         self.user_handler = UserHandler()
         self.message_handler = MessageHandler(self.logger)
+        
+        # Leader election state variables
+        self.is_leader = False
+        self.current_leader = None
+        self.election_in_progress = False
+        self.election_lock = threading.Lock()
         
         # Message routing dictionary: maps message types to their handlers and response types
         self.message_handlers = {
@@ -68,23 +90,357 @@ class Server:
             MSG_DELETE_MESSAGE_REQUEST: (self.message_handler.delete_messages, MSG_DELETE_MESSAGE_RESPONSE),
             MSG_DELETE_ACCOUNT_REQUEST: (self.user_handler.delete_user, MSG_DELETE_ACCOUNT_RESPONSE),
         }
-
+        
+        # Initialize list to store other servers' information
+        self.other_servers = []
+        self.grpc_connections = {}
+        
+        # Initialize gRPC server if needed
         if self.protocol_type == 'grpc':
-            self.grpc_server = GRPCServer(self.host, self.port, self.logger)
+            try:
+                self.grpc_server = GRPCServer(self.host, self.port, self.logger, self)
+                self.grpc_server.start()
+                self.logger.info(f"gRPC server started successfully, listening on {self.host}:{self.port}")
+            except Exception as e:
+                self.logger.error(f"Failed to start gRPC server: {str(e)}", exc_info=True)
+        
+        # Register server with registry service
+        self._register_with_registry()
+        
+        # Start periodic health check of leader
+        if self.protocol_type == 'grpc':
+            self._start_leader_health_check()
+            
+        # Mark initialization as complete
+        self.initialization_complete = True
+        self.logger.info("Server initialization complete")
+
+    def _init_database_connections(self):
+        """Initialize connections to both main database and registry database"""
+        # Connect to the main database
+        self.db_manager = DatabaseManager.get_instance('database')
+        if self.db_manager.db is None:
+            self.logger.error("Failed to connect to main database.", exc_info=True)
+            raise RuntimeError("Database connection failed.")
+            
+        # Connect to registry database
+        self.registry_manager = DatabaseManager.get_instance('registry')
+        if self.registry_manager.db is None:
+            self.logger.error("Failed to connect to registry database.", exc_info=True)
+            raise RuntimeError("Registry connection failed.")
+        
+        self.logger.info("Successfully connected to both databases.")
+        
+    def _register_with_registry(self):
+        """Register this server with the registry service and discover other servers"""
+        try:
+            # Create a server object to register
+            server_data = ServerModel(
+                server_id=self.server_id,
+                host=self.host,
+                port=self.port,
+                status="ONLINE",
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+                is_leader=False
+            )
+            
+            # Initialize server registry collection and register this server
+            servers_collection = ServersCollection()
+            result = servers_collection.register_server(server_data)
+            
+            if result:
+                self.logger.info(f"Successfully registered server {self.server_id} with registry")
+            else:
+                self.logger.warning(f"Failed to register server {self.server_id} with registry")
+            
+            # Wait for 10 seconds to allow other servers to register
+            self.logger.info("Waiting for 10 seconds to allow other servers to register...")
+            time.sleep(10)
+            
+            # Start election if using gRPC
+            if self.protocol_type == 'grpc':
+                self.start_election()
+                
+        except Exception as e:
+            self.logger.error(f"Error registering with registry: {str(e)}", exc_info=True)
+    
+    def start_election(self):
+        """Start leader election using Bully algorithm"""
+        with self.election_lock:
+            # If an election is already in progress, don't start another one
+            if self.election_in_progress:
+                self.logger.info("Election already in progress, not starting a new one")
+                return
+                
+            self.election_in_progress = True
+            self.is_leader = False  # Reset leader status during election
+            self.current_leader = None
+            
+        self.logger.info(f"Starting election from server {self.server_id}")
+
+        # Get all registered servers
+        self._discover_servers()
+        
+        # Find servers with higher IDs
+        higher_servers = [server for server in self.other_servers 
+                         if server['server_id'] > self.server_id]
+        
+        if not higher_servers:
+            # No servers with higher IDs, we are the leader
+            self.logger.info(f"No servers with higher IDs found. Server {self.server_id} becomes leader")
+            self._become_leader()
+            return
+            
+        # Send election messages to all servers with higher IDs
+        responses_received = []
+        
+        for server in higher_servers:
+            server_id = server['server_id']
+            if server_id not in self.grpc_connections:
+                self.logger.warning(f"No connection to server {server_id}, skipping election message")
+                continue
+                
+            try:
+                # Send election message with increased timeout
+                stub = self.grpc_connections[server_id]['election_stub']
+                request = chat_pb2.ElectionRequest(server_id=self.server_id)
+                
+                try:
+                    response = stub.Election(request, timeout=self.ELECTION_TIMEOUT)
+                    if response.acknowledged:
+                        self.logger.info(f"Server {server_id} responded to election")
+                        responses_received.append(server_id)
+                except grpc.RpcError as e:
+                    if 'deadline exceeded' in str(e).lower():
+                        self.logger.warning(f"Election request to server {server_id} timed out after {self.ELECTION_TIMEOUT}s")
+                    else:
+                        self.logger.warning(f"Failed to get response from server {server_id}: {str(e)}")
+                    
+            except Exception as e:
+                self.logger.warning(f"Failed to send election message to server {server_id}: {str(e)}")
+        
+        # Wait for a short time to see if any higher servers take over
+        time.sleep(5)  # Give higher servers time to send coordinator message
+        
+        # If no responses received from higher servers AND we haven't received a coordinator message,
+        # become leader
+        if not responses_received and not self.current_leader:
+            self.logger.info(f"No higher servers responded. Server {self.server_id} becomes leader")
+            self._become_leader()
+        else:
+            # We received responses, wait for coordinator message
+            self.logger.info(f"Received responses from higher servers: {responses_received}")
+            # Reset election flag after timeout
+            threading.Timer(10, self._reset_election_flag).start()
+
+    def _discover_servers(self):
+        """Discover other servers from the registry"""
+        try:
+            servers_collection = ServersCollection()
+            all_servers = servers_collection.get_all_servers()
+            
+            # Clear current server list
+            self.other_servers = []
+            
+            # Process servers
+            for server in all_servers:
+                # Skip this server
+                if server.server_id == self.server_id:
+                    continue
+                    
+                # Add server to the list of other servers
+                self.other_servers.append({
+                    'server_id': server.server_id,
+                    'host': server.host,
+                    'port': server.port,
+                    'status': server.status,
+                    'is_leader': server.is_leader
+                })
+                
+            self.logger.info(f"Discovered {len(self.other_servers)} other server(s)")
+            
+            # Connect to other servers
+            if self.protocol_type == 'grpc':
+                self._establish_grpc_connections()
+                
+        except Exception as e:
+            self.logger.error(f"Error discovering servers: {str(e)}", exc_info=True)
+    
+    def _establish_grpc_connections(self):
+        """Establish gRPC connections to other servers"""
+        # Keep track of current servers to remove stale connections later
+        current_server_ids = set()
+        
+        # Update or create new connections
+        for server in self.other_servers:
+            server_id = server['server_id']
+            current_server_ids.add(server_id)
+            
+            # Skip if connection already exists and is valid
+            if (server_id in self.grpc_connections and 
+                self.grpc_connections[server_id]['host'] == server['host'] and 
+                self.grpc_connections[server_id]['port'] == server['port']):
+                continue
+                
+            try:
+                host = server['host']
+                port = server['port']
+                
+                # Close existing connection if it exists
+                if server_id in self.grpc_connections and 'channel' in self.grpc_connections[server_id]:
+                    try:
+                        self.grpc_connections[server_id]['channel'].close()
+                    except:
+                        pass
+                
+                # Create gRPC channel
+                channel = grpc.insecure_channel(f"{host}:{port}")
+                
+                # Create stubs for different services
+                chat_stub = chat_pb2_grpc.ChatServiceStub(channel)
+                election_stub = chat_pb2_grpc.LeaderElectionServiceStub(channel)
+                
+                # Store connection info
+                self.grpc_connections[server_id] = {
+                    'server_id': server_id,
+                    'host': host,
+                    'port': port,
+                    'channel': channel,
+                    'chat_stub': chat_stub,
+                    'election_stub': election_stub,
+                    'is_leader': server['is_leader']
+                }
+                
+                self.logger.info(f"Established gRPC connection to server {server_id} at {host}:{port}")
+            except Exception as e:
+                self.logger.error(f"Failed to establish gRPC connection to server {server_id}: {str(e)}")
+        
+        # Remove stale connections
+        stale_server_ids = set(self.grpc_connections.keys()) - current_server_ids
+        for server_id in stale_server_ids:
+            if 'channel' in self.grpc_connections[server_id]:
+                try:
+                    self.grpc_connections[server_id]['channel'].close()
+                except:
+                    pass
+            del self.grpc_connections[server_id]
+            self.logger.info(f"Removed stale connection to server {server_id}")
+    
+    
+    def _reset_election_flag(self):
+        """Reset election in progress flag after timeout"""
+        with self.election_lock:
+            self.election_in_progress = False
+        self.logger.info("Reset election flag, ready for new elections")
+    
+    def _become_leader(self):
+        """Become the leader and notify all other servers"""
+        self.is_leader = True
+        self.current_leader = self.server_id
+        
+        # Update leader status in database
+        try:
+            servers_collection = ServersCollection()
+            # First reset any existing leader status
+            servers_collection.reset_all_leader_status()
+            # Then set this server as leader
+            servers_collection.update_server_leader_status(self.server_id, True)
+            self.logger.info(f"Updated leader status in database for server {self.server_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to update leader status: {str(e)}")
+        
+        # Notify all other servers
+        for server_id, connection in self.grpc_connections.items():
+            try:
+                stub = connection['election_stub']
+                request = chat_pb2.CoordinatorRequest(server_id=self.server_id)
+                
+                try:
+                    response = stub.Coordinator(request, timeout=self.COORDINATOR_TIMEOUT)
+                    if response.acknowledged:
+                        self.logger.info(f"Server {server_id} acknowledged {self.server_id} as leader")
+                    else:
+                        self.logger.warning(f"Server {server_id} did not acknowledge leader message")
+                except grpc.RpcError as e:
+                    if 'deadline exceeded' in str(e).lower():
+                        self.logger.warning(f"Coordinator request to server {server_id} timed out after {self.COORDINATOR_TIMEOUT}s")
+                    else:
+                        self.logger.warning(f"Failed to get acknowledgment from server {server_id}: {str(e)}")
+                    
+            except Exception as e:
+                self.logger.warning(f"Failed to send coordinator message to server {server_id}: {str(e)}")
+        
+        with self.election_lock:
+            self.election_in_progress = False
+            
+        self.logger.info(f"Server {self.server_id} is now the leader")
+    
+    def update_leader(self, leader_id):
+        """Update the leader information based on coordinator messages"""
+        # Update local leader information
+        if leader_id != self.current_leader:
+            self.logger.info(f"Updating leader from {self.current_leader} to {leader_id}")
+            self.current_leader = leader_id
+            self.is_leader = (leader_id == self.server_id)
+            
+            # Reset election flag
+            with self.election_lock:
+                self.election_in_progress = False
+    
+    def _start_leader_health_check(self):
+        """Start periodic health checks of the current leader"""
+        def health_check_task():
+            while True:
+                time.sleep(15)  # Check every 15 seconds
+                self._check_leader_health()
+        
+        health_check_thread = threading.Thread(target=health_check_task, daemon=True)
+        health_check_thread.start()
+        self.logger.info("Started leader health check thread")
+    
+    def _check_leader_health(self):
+        """Check if the current leader is alive, start election if not"""
+        # Skip if we are the leader or no leader is elected yet
+        if self.is_leader or not self.current_leader:
+            return
+            
+        # Try to contact the leader
+        if self.current_leader in self.grpc_connections:
+            try:
+                stub = self.grpc_connections[self.current_leader]['election_stub']
+                request = chat_pb2.HeartbeatRequest(server_id=self.server_id)
+                
+                # Set timeout for heartbeat with increased timeout
+                response = stub.Heartbeat(request, timeout=self.HEARTBEAT_TIMEOUT)
+                
+                if not response.is_alive or not response.is_leader:
+                    self.logger.warning(f"Leader {self.current_leader} not functioning properly, starting election")
+                    self.start_election()
+                    
+            except grpc.RpcError as e:
+                if 'deadline exceeded' in str(e).lower():
+                    self.logger.warning(f"Heartbeat request to leader {self.current_leader} timed out after {self.HEARTBEAT_TIMEOUT}s")
+                else:
+                    self.logger.warning(f"Leader {self.current_leader} unreachable: {str(e)}")
+                self.start_election()
+        else:
+            self.logger.warning(f"No connection to leader {self.current_leader}, starting election")
+            self.start_election()
 
     def start(self):
         """Start the appropriate server based on protocol type"""
-        if DatabaseManager.get_instance().db is None:
-            self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
+        # Check database connections
+        if self.db_manager.db is None:
+            self.logger.error("Failed to connect to main database. Server shutting down.", exc_info=True)
             return
-
+        
+        if self.registry_manager.db is None:
+            self.logger.error("Failed to connect to registry database. Server shutting down.", exc_info=True)
+            return
+            
         if self.protocol_type == 'grpc':
-            try:
-                self.grpc_server.start()
-                self.grpc_server.server.wait_for_termination()
-            except Exception as e:
-                self.logger.error(f"Failed to start gRPC server: {str(e)}", exc_info=True)
-                raise
+            self.grpc_server.server.wait_for_termination()
         else:
             try:
                 self.server_socket.bind((self.host, self.port))
@@ -93,7 +449,6 @@ class Server:
             except Exception as e:
                 self.logger.error(f"Failed to bind server socket: {str(e)}", exc_info=True)
                 raise
-
             while True:
                 client_socket, client_address = self.server_socket.accept()
                 self.logger.info(f"New client connected: {client_address}")
@@ -132,7 +487,6 @@ class Server:
                     self.logger.error(f"Error sending error response to {client_address}: {str(e)}", exc_info=True)
                     break
                 continue
-
         # Cleanup disconnected client
         if client_socket in self.online_users:
             username = self.online_users.pop(client_socket)
@@ -157,6 +511,12 @@ class Server:
         Returns:
             dict: Response data to be sent back to client
         """
+        # Check if server is still initializing
+        if not self.initialization_complete:
+            response = {"code": ERROR_SERVER_INITIALIZING, "message": MESSAGE_SERVER_INITIALIZING}
+            self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
+            return response
+            
         # Validate message type
         if message_type not in self.message_handlers:
             response = {"code": ERROR_INVALID_MESSAGE, "message": MESSAGE_INVALID_MESSAGE}
@@ -193,18 +553,47 @@ class Server:
             response = {"code": ERROR_SERVER_ERROR, "message": MESSAGE_SERVER_ERROR}
             self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
-
+    
+    def update_server_status(self, status, termination: bool):
+        """Update this server's status in the registry
+        
+        Args:
+            status: New status ("ONLINE", "STOPPED", "OFFLINE")
+            termination: Boolean indicating if server is terminating (if it is, then the leader status would be set to False)
+        """
+        try:
+            servers_collection = ServersCollection()
+            result = servers_collection.update_server_status(self.server_id, status)
+            if result:
+                self.logger.info(f"Updated server status to {status}")
+            else:
+                self.logger.warning(f"Failed to update server status to {status}")
+                
+            # Also update leader status if this server is a leader
+            if self.is_leader:
+                servers_collection.update_server_leader_status(self.server_id, False if termination else self.is_leader)
+                
+        except Exception as e:
+            self.logger.error(f"Error updating server status: {str(e)}", exc_info=True)
     
     def main(self):
         """Main function to start the server and handle shutdown"""
-        if DatabaseManager.get_instance().db is None:
-            self.logger.error("Failed to connect to database. Server shutting down.", exc_info=True)
-            return
         try:
             self.start()
         except KeyboardInterrupt:
             self.logger.info("Server shutting down...")
+            self.update_server_status("STOPPED", True)
         except Exception as e:
             self.logger.error(f"Server error: {str(e)}", exc_info=True)
+            self.update_server_status("OFFLINE", True)
         finally:
-            self.server_socket.close()
+            # Close gRPC connections
+            for server_id in self.grpc_connections:
+                if 'channel' in self.grpc_connections[server_id]:
+                    try:
+                        self.grpc_connections[server_id]['channel'].close()
+                    except:
+                        pass
+                        
+            if hasattr(self, 'server_socket'):
+                self.server_socket.close()

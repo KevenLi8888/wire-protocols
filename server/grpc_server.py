@@ -6,13 +6,38 @@ from server.handlers.message_handler import MessageHandler
 from shared.constants import SUCCESS, MESSAGE_OK
 
 class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
-    def __init__(self, logger):
+    def __init__(self, logger, server_instance):
         self.user_handler = UserHandler()
         self.message_handler = MessageHandler(logger)
         self.logger = logger
+        self.server_instance = server_instance  # Reference to the main server instance
+
+    def _check_server_state(self, context):
+        """
+        Check if the server is initialized and is the leader (if applicable)
+        Returns True if request should be processed, False otherwise
+        """
+        if self.server_instance:
+            # Check if server is still initializing
+            if not self.server_instance.initialization_complete:
+                context.set_code(grpc.StatusCode.UNAVAILABLE)
+                context.set_details("Server is still initializing, please try again later")
+                return False
+                
+            # Check if this server is the leader
+            if not self.server_instance.is_leader and self.server_instance.current_leader is not None:
+                context.set_code(grpc.StatusCode.FAILED_PRECONDITION)
+                context.set_details("This server is not the leader, please connect to the leader server")
+                return False
+        
+        return True
 
     def CreateAccount(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.CreateAccountResponse()
+                
             result = self.user_handler.create_account({
                 'email': request.email,
                 'username': request.username,
@@ -30,6 +55,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def Login(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.LoginResponse()
+                
             result = self.user_handler.login({
                 'email': request.email,
                 'password': request.password
@@ -54,6 +83,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def DeleteAccount(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.BasicResponse()
+                
             result = self.user_handler.delete_user({
                 'email': request.email,
                 'password': request.password
@@ -70,6 +103,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def SearchUsers(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.SearchUsersResponse()
+                
             result = self.user_handler.search_users({
                 'pattern': request.pattern,
                 'page': request.page,
@@ -95,6 +132,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def SendMessage(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.SendMessageResponse()
+                
             result = self.message_handler.send_message({
                 'content': request.content,
                 'recipient_id': request.recipient_id,
@@ -122,6 +163,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def GetRecentChats(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetRecentChatsResponse()
+                
             result = self.message_handler.get_recent_chats({
                 'user_id': request.user_id,
                 'page': request.page
@@ -152,6 +197,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def GetPreviousMessages(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetPreviousMessagesResponse()
+                
             result = self.message_handler.get_previous_messages({
                 'user_id': request.user_id,
                 'other_user_id': request.other_user_id,
@@ -184,6 +233,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def GetChatUnreadCount(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetChatUnreadCountResponse()
+                
             result = self.message_handler.get_chat_unread_count({
                 'user_id': request.user_id,
                 'other_user_id': request.other_user_id
@@ -205,6 +258,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def GetUnreadMessages(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetUnreadMessagesResponse()
+                
             result = self.message_handler.get_chat_unread_messages({
                 'user_id': request.user_id,
                 'other_user_id': request.other_user_id,
@@ -233,6 +290,10 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
     def DeleteMessages(self, request, context):
         try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.BasicResponse()
+                
             result = self.message_handler.delete_messages({
                 'message_ids': list(request.message_ids)
             })
@@ -246,14 +307,59 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return chat_pb2.BasicResponse()
 
+class LeaderElectionServicer(chat_pb2_grpc.LeaderElectionServiceServicer):
+    def __init__(self, server_instance, logger):
+        self.server_instance = server_instance
+        self.logger = logger
+
+    def Election(self, request, context):
+        """Handle election request from another server"""
+        self.logger.info(f"Received election request from server {request.server_id}")
+        
+        # Participate in election by triggering our own election process
+        if self.server_instance.server_id > request.server_id:
+            # Our ID is higher, so we should take over the election process
+            self.logger.info(f"Server ID {self.server_instance.server_id} is higher than {request.server_id}, starting election")
+            self.server_instance.start_election()
+            return chat_pb2.ElectionResponse(acknowledged=True)
+        else:
+            # Our ID is lower, so ignore election request
+            self.logger.info(f"Server ID {self.server_instance.server_id} is lower than {request.server_id}, ignoring election")
+            return chat_pb2.ElectionResponse(acknowledged=False)
+
+    def Coordinator(self, request, context):
+        """Handle coordinator announcement from the elected leader"""
+        leader_id = request.server_id
+        self.logger.info(f"Received coordinator message from server {leader_id}")
+        
+        # Update local leader info
+        self.server_instance.update_leader(leader_id)
+        return chat_pb2.CoordinatorResponse(acknowledged=True)
+
+    def Heartbeat(self, request, context):
+        """Respond to heartbeat checks"""
+        self.logger.debug(f"Received heartbeat from server {request.server_id}")
+        return chat_pb2.HeartbeatResponse(
+            is_alive=True,
+            is_leader=self.server_instance.is_leader
+        )
+
 class GRPCServer:
-    def __init__(self, host, port, logger):
+    def __init__(self, host, port, logger, server_instance):
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
         self.logger = logger
         self.host = host
         self.port = port
+        self.server_instance = server_instance  # Reference to the main server instance
+        
+        # Add chat service
         chat_pb2_grpc.add_ChatServiceServicer_to_server(
-            ChatServiceServicer(logger), self.server)
+            ChatServiceServicer(logger, server_instance), self.server)
+        
+        # Add leader election service if server instance is provided
+        if server_instance:
+            chat_pb2_grpc.add_LeaderElectionServiceServicer_to_server(
+                LeaderElectionServicer(server_instance, logger), self.server)
 
     def start(self):
         self.server.add_insecure_port(f'{self.host}:{self.port}')

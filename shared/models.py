@@ -1,6 +1,7 @@
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional, TypeVar, Type
+from venv import create
 
 T = TypeVar('T', bound='BaseModel')
 
@@ -34,4 +35,15 @@ class Message(BaseModel):
     content: str
     timestamp: datetime
     is_read: bool = False
-    _id: Optional[str] = None  # Changed from id to _id for consistency
+    _id: Optional[str] = None
+
+@dataclass
+class Server(BaseModel):
+    server_id: str
+    host: str
+    port: int
+    status: str # ONLINE, STOPPED, OFFLINE; STOPPED: intended termination, OFFLINE: crashed/fail-stopped
+    created_at: datetime
+    updated_at: datetime   
+    is_leader: bool = False
+    _id: Optional[str] = None

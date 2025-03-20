@@ -1,7 +1,7 @@
 import math
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
-from shared.models import User
+from shared.models import User, Server
 from database.connection import DatabaseManager
 from bson import ObjectId
 
@@ -10,14 +10,24 @@ class UsersCollection:
     Handles all database operations related to users.
     Provides methods for CRUD operations, user searches, and authentication updates.
     Collection schema:
-    - _id: ObjectId
-    - username: str
-    - email: str
-    - last_login: datetime
+    ```
+    {
+    "_id": "ObjectId",          // Unique identifier for each user
+    "username": "string",       // Username (not unique)
+    "email": "string",          // Unique email address
+    "password_hash": "string",  // Hashed password
+    "created_at": "Date",       // Account creation timestamp
+    "last_login": "Date",       // Last login timestamp
+    }
+    ```
     """
-    def __init__(self):
-        """Initialize UsersCollection with database connection"""
-        self.db = DatabaseManager.get_instance().db
+    def __init__(self, db_type: str = 'database'):
+        """Initialize UsersCollection with database connection
+        
+        Args:
+            db_type: Type of database to connect to ('database' or 'registry')
+        """
+        self.db = DatabaseManager.get_instance(db_type).db
         self.collection = self.db['users']
 
     def insert_one(self, user: User) -> Optional[str]:
@@ -100,9 +110,13 @@ class MessagesCollection:
     - timestamp: datetime
     - is_read: bool
     """
-    def __init__(self):
-        """Initialize MessagesCollection with database connection"""
-        self.db = DatabaseManager.get_instance().db
+    def __init__(self, db_type: str = 'database'):
+        """Initialize MessagesCollection with database connection
+        
+        Args:
+            db_type: Type of database to connect to ('database' or 'registry')
+        """
+        self.db = DatabaseManager.get_instance(db_type).db
         self.collection = self.db['messages']
 
     def insert_message(self, sender_id: str, recipient_id: str, content: str) -> Optional[str]:
@@ -206,7 +220,7 @@ class MessagesCollection:
         total_pages = math.ceil(total_chats / per_page)
         
         # Look up usernames for the other users in the chats
-        users_collection = UsersCollection()
+        users_collection = UsersCollection(db_type=self.db_type)
         formatted_chats = []
         for chat in chats:
             other_user = users_collection.find_by_id(str(chat['_id']))
@@ -291,7 +305,7 @@ class MessagesCollection:
             .limit(per_page)
 
         # Create users collection instance to look up usernames
-        users_collection = UsersCollection()
+        users_collection = UsersCollection(db_type=self.db_type)
         
         # Cache user info to avoid multiple DB lookups
         user_cache = {}
@@ -341,3 +355,165 @@ class MessagesCollection:
             ]
         })
         return result.deleted_count
+
+class ServersCollection:
+    """
+    Handles all database operations related to server registry.
+    Provides methods for server registration, discovery, and status management.
+    Collection schema:
+    - _id: ObjectId
+    - server_id: str (unique identifier for each server)
+    - host: str
+    - port: int
+    - status: str (ONLINE, STOPPED, OFFLINE)
+    - created_at: datetime
+    - updated_at: datetime
+    - is_leader: bool (identifies the leader server in a distributed setup)
+    """
+    def __init__(self, db_type: str = 'registry'):
+        """Initialize ServersCollection with database connection
+        
+        Args:
+            db_type: Type of database to connect to (should be 'registry')
+        """
+        self.db = DatabaseManager.get_instance(db_type).db
+        self.collection = self.db['servers']
+        
+    def register_server(self, server: Server) -> Optional[str]:
+        """Register a server in the registry or update its status if already exists
+        
+        Args:
+            server: Server object containing server details
+            
+        Returns:
+            str: ID of the registered server record
+        """
+        # Check if server with this ID already exists
+        existing = self.collection.find_one({"server_id": server.server_id})
+        
+        if existing:
+            # Update existing server entry
+            server_dict = server.to_dict()
+            server_dict['updated_at'] = datetime.now()
+            self.collection.update_one(
+                {"server_id": server.server_id},
+                {"$set": server_dict}
+            )
+            return str(existing['_id'])
+        else:
+            # Insert new server entry
+            server_dict = server.to_dict()
+            if 'created_at' not in server_dict or not server_dict['created_at']:
+                server_dict['created_at'] = datetime.now()
+            server_dict['updated_at'] = datetime.now()
+            
+            result = self.collection.insert_one(server_dict)
+            return str(result.inserted_id) if result else None
+    
+    def get_all_servers(self, include_terminated: bool = False) -> List[Server]:
+        """Get all registered servers
+        
+        Args:
+            include_terminated: Whether to include terminated servers in the results (OFFLINE or STOPPED)
+            
+        Returns:
+            List[Server]: List of server objects
+        """
+        query = {} if include_terminated else {"status": {"$nin": ["OFFLINE", "STOPPED"]}}
+        servers_data = self.collection.find(query)
+        
+        return [Server.from_dict(server_data) for server_data in servers_data]
+    
+    def get_server_by_id(self, server_id: str) -> Optional[Server]:
+        """Find a server by its ID
+        
+        Args:
+            server_id: Unique ID of the server
+            
+        Returns:
+            Server: Server object if found, None otherwise
+        """
+        data = self.collection.find_one({"server_id": server_id})
+        return Server.from_dict(data) if data else None
+    
+    def update_server_status(self, server_id: str, status: str) -> bool:
+        """Update server status
+        
+        Args:
+            server_id: ID of the server to update
+            status: New status (ONLINE, STOPPED, OFFLINE)
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        result = self.collection.update_one(
+            {"server_id": server_id},
+            {"$set": {"status": status, "updated_at": datetime.now()}}
+        )
+        return result.modified_count > 0
+    
+    def update_server_leader_status(self, server_id: str, is_leader: bool) -> bool:
+        """Update the leader status of a server
+        
+        Args:
+            server_id: ID of the server to update
+            is_leader: Boolean indicating if the server is leader
+        
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            result = self.collection.update_one(
+                {"server_id": server_id},
+                {"$set": {"is_leader": is_leader, "updated_at": datetime.now()}}
+            )
+            return result.acknowledged and result.modified_count > 0
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to update server leader status: {str(e)}")
+            return False
+    
+    def set_leader(self, server_id: str) -> bool:
+        """Set a server as the leader and ensure all others are not leaders
+        
+        Args:
+            server_id: ID of the server to set as leader
+            
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        # First, unset leader status for all servers
+        self.collection.update_many({}, {"$set": {"is_leader": False}})
+        
+        # Then set the specified server as leader
+        result = self.collection.update_one(
+            {"server_id": server_id},
+            {"$set": {"is_leader": True, "updated_at": datetime.now()}}
+        )
+        return result.modified_count > 0
+    
+    def get_leader(self) -> Optional[Server]:
+        """Get the current leader server
+        
+        Returns:
+            Server: Leader server object if found, None otherwise
+        """
+        data = self.collection.find_one({"is_leader": True})
+        return Server.from_dict(data) if data else None
+    
+    def reset_all_leader_status(self) -> bool:
+        """Reset leader status for all servers to False
+        
+        Returns:
+            bool: True if update was successful, False otherwise
+        """
+        try:
+            result = self.collection.update_many(
+                {},  # Match all documents
+                {"$set": {"is_leader": False}}
+            )
+            return result.acknowledged
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to reset all server leader statuses: {str(e)}")
+            return False

@@ -16,6 +16,16 @@ service ChatService {
   rpc DeleteMessages(DeleteMessagesRequest) returns (BasicResponse);
 }
 
+// New service for leader election
+service LeaderElectionService {
+  // Send election message to initiate or participate in election
+  rpc Election(ElectionRequest) returns (ElectionResponse);
+  // Notify others that this node is the leader
+  rpc Coordinator(CoordinatorRequest) returns (CoordinatorResponse);
+  // Check if a node is alive
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
 // Basic response for simple operations
 message BasicResponse {
   int32 code = 1;
@@ -192,4 +202,30 @@ message GetUnreadMessagesResponse {
   int32 code = 1;
   string message = 2;
   repeated UnreadMessage messages = 3;
+}
+
+// Leader Election Messages
+message ElectionRequest {
+  string server_id = 1;
+}
+
+message ElectionResponse {
+  bool acknowledged = 1;
+}
+
+message CoordinatorRequest {
+  string server_id = 1;
+}
+
+message CoordinatorResponse {
+  bool acknowledged = 1;
+}
+
+message HeartbeatRequest {
+  string server_id = 1;
+}
+
+message HeartbeatResponse {
+  bool is_alive = 1;
+  bool is_leader = 2;
 }
