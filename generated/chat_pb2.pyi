@@ -14,14 +14,16 @@ class BasicResponse(_message.Message):
     def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
 
 class CreateAccountRequest(_message.Message):
-    __slots__ = ("email", "username", "password")
+    __slots__ = ("email", "username", "password", "user_id")
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     PASSWORD_FIELD_NUMBER: _ClassVar[int]
+    USER_ID_FIELD_NUMBER: _ClassVar[int]
     email: str
     username: str
     password: str
-    def __init__(self, email: _Optional[str] = ..., username: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
+    user_id: str
+    def __init__(self, email: _Optional[str] = ..., username: _Optional[str] = ..., password: _Optional[str] = ..., user_id: _Optional[str] = ...) -> None: ...
 
 class CreateAccountResponse(_message.Message):
     __slots__ = ("code", "message")
@@ -106,14 +108,16 @@ class SearchUsersResponse(_message.Message):
     def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ..., users: _Optional[_Iterable[_Union[UserData, _Mapping]]] = ..., total_pages: _Optional[int] = ...) -> None: ...
 
 class SendMessageRequest(_message.Message):
-    __slots__ = ("content", "recipient_id", "sender_id")
+    __slots__ = ("content", "recipient_id", "sender_id", "message_id")
     CONTENT_FIELD_NUMBER: _ClassVar[int]
     RECIPIENT_ID_FIELD_NUMBER: _ClassVar[int]
     SENDER_ID_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     content: str
     recipient_id: str
     sender_id: str
-    def __init__(self, content: _Optional[str] = ..., recipient_id: _Optional[str] = ..., sender_id: _Optional[str] = ...) -> None: ...
+    message_id: str
+    def __init__(self, content: _Optional[str] = ..., recipient_id: _Optional[str] = ..., sender_id: _Optional[str] = ..., message_id: _Optional[str] = ...) -> None: ...
 
 class MessageData(_message.Message):
     __slots__ = ("message_id", "sender_id", "recipient_id", "content", "timestamp")

@@ -4,6 +4,7 @@ from datetime import datetime
 from shared.models import User, Server
 from database.connection import DatabaseManager
 from bson import ObjectId
+import uuid
 
 class UsersCollection:
     """
@@ -12,7 +13,8 @@ class UsersCollection:
     Collection schema:
     ```
     {
-    "_id": "ObjectId",          // Unique identifier for each user
+    "_id": "ObjectId",          // Unique identifier for each user (MongoDB internal)
+    "user_id": "string",        // Unique user ID (UUID) consistent across replicas
     "username": "string",       // Username (not unique)
     "email": "string",          // Unique email address
     "password_hash": "string",  // Hashed password
@@ -28,13 +30,18 @@ class UsersCollection:
             db_type: Type of database to connect to ('database' or 'registry')
         """
         self.db = DatabaseManager.get_instance(db_type).db
+        self.db_type = db_type 
         self.collection = self.db['users']
 
     def insert_one(self, user: User) -> Optional[str]:
         """Insert a new user into the database and return their ID"""
+        # Generate UUID for user_id if not provided
+        if not user.user_id:
+            user.user_id = str(uuid.uuid4())
+            
         user_dict = user.to_dict()
         result = self.collection.insert_one(user_dict)
-        return str(result.inserted_id) if result else None
+        return user.user_id if result else None
 
     def find_by_username(self, username: str) -> Optional[User]:
         """Find a user by their username"""
@@ -48,28 +55,28 @@ class UsersCollection:
     
     def delete_one(self, user_id: str) -> bool:
         """Delete a user by their ID and return success status"""
-        result = self.collection.delete_one({"_id": ObjectId(user_id)})
+        result = self.collection.delete_one({"user_id": user_id})
         return result.deleted_count > 0
 
     def update_last_login(self, user_id: str) -> bool:
         """Update user's last login timestamp and return success status"""
         result = self.collection.update_one(
-            {"_id": ObjectId(user_id)},
+            {"user_id": user_id},
             {"$set": {"last_login": datetime.now()}}
         )
         return result.modified_count > 0
 
     def get_all_users(self) -> list[User]:
         """Retrieve all users from the database"""
-        users = self.collection.find({}, {'_id': 1, 'username': 1, 'email': 1})
+        users = self.collection.find({}, {'user_id': 1, 'username': 1, 'email': 1})
         return [u for u in (User.from_dict(user) for user in users) if u is not None]
     
     def search_users_by_username(self, current_user_id: str, filter_str: str) -> list[User]:
         '''Search users by username, filter_string is regex, excluding the current user'''
         users = self.collection.find({
             'username': {'$regex': filter_str, '$options': 'i'},
-            '_id': {'$ne': ObjectId(current_user_id)}
-        }, {'_id': 1, 'username': 1, 'email': 1})
+            'user_id': {'$ne': current_user_id}
+        }, {'user_id': 1, 'username': 1, 'email': 1})
         return [u for u in (User.from_dict(user) for user in users) if u is not None]
 
     def search_users_by_username_paginated(self, current_user_id: str, pattern: str, page: int, per_page: int = 10) -> tuple[list[User], int]:
@@ -78,7 +85,7 @@ class UsersCollection:
         
         query = {
             'username': {'$regex': pattern, '$options': 'i'},
-            '_id': {'$ne': ObjectId(current_user_id)}
+            'user_id': {'$ne': current_user_id}
         }
         
         total = self.collection.count_documents(query)
@@ -86,14 +93,14 @@ class UsersCollection:
         
         users = self.collection.find(
             query,
-            {'_id': 1, 'username': 1, 'email': 1}
+            {'user_id': 1, 'username': 1, 'email': 1}
         ).skip(skip).limit(per_page)
         
         return [u for u in (User.from_dict(user) for user in users) if u is not None], total_pages
 
     def find_by_id(self, user_id: str) -> Optional[User]:
         try:
-            data = self.collection.find_one({"_id": ObjectId(user_id)})
+            data = self.collection.find_one({"user_id": user_id})
             return User.from_dict(data) if data else None
         except:
             return None
@@ -103,9 +110,10 @@ class MessagesCollection:
     Handles all database operations related to messages between users.
     Provides methods for message management, chat history, and read/unread status.
     Collection schema:
-    - _id: ObjectId
-    - sender_id: ObjectId
-    - recipient_id: ObjectId
+    - _id: ObjectId (MongoDB internal)
+    - message_id: str (UUID - consistent across replicas)
+    - sender_id: str (user_id, not ObjectId)
+    - recipient_id: str (user_id, not ObjectId)
     - content: str
     - timestamp: datetime
     - is_read: bool
@@ -116,26 +124,32 @@ class MessagesCollection:
         Args:
             db_type: Type of database to connect to ('database' or 'registry')
         """
+        self.db_type = db_type  # Store db_type as instance variable
         self.db = DatabaseManager.get_instance(db_type).db
         self.collection = self.db['messages']
 
-    def insert_message(self, sender_id: str, recipient_id: str, content: str) -> Optional[str]:
+    def insert_message(self, sender_id: str, recipient_id: str, content: str, message_id: str = None) -> Optional[str]:
         """Insert a new message and return its ID"""
+        # Generate UUID for message_id if not provided
+        if not message_id:
+            message_id = str(uuid.uuid4())
+            
         message = {
-            'sender_id': ObjectId(sender_id),
-            'recipient_id': ObjectId(recipient_id),
+            'message_id': message_id,
+            'sender_id': sender_id,
+            'recipient_id': recipient_id,
             'content': content,
             'timestamp': datetime.now(),
             'is_read': False
         }
         result = self.collection.insert_one(message)
-        return str(result.inserted_id) if result else None
+        return message_id if result else None
 
     def get_unread_messages(self, user_id: str, other_user_id: str, num_messages: int) -> list:
         """Get unread messages between two users with a limit"""
         messages = self.collection.find({
-            'recipient_id': ObjectId(user_id),
-            'sender_id': ObjectId(other_user_id),
+            'recipient_id': user_id,
+            'sender_id': other_user_id,
             'is_read': False
         }).sort('timestamp', 1).limit(num_messages)
         return [msg for msg in messages]
@@ -143,7 +157,7 @@ class MessagesCollection:
     def mark_as_read(self, message_ids: list[str]) -> bool:
         """Mark multiple messages as read and return success status"""
         result = self.collection.update_many(
-            {'_id': {'$in': [ObjectId(mid) for mid in message_ids]}},
+            {'message_id': {'$in': message_ids}},
             {'$set': {'is_read': True}}
         )
         return result.modified_count > 0
@@ -151,7 +165,7 @@ class MessagesCollection:
     def delete_messages(self, message_ids: list[str]) -> bool:
         """Delete multiple messages by their IDs and return success status"""
         result = self.collection.delete_many(
-            {'_id': {'$in': [ObjectId(mid) for mid in message_ids]}}
+            {'message_id': {'$in': message_ids}}
         )
         return result.deleted_count > 0
 
@@ -170,7 +184,6 @@ class MessagesCollection:
         - List of formatted chat objects with last message and unread count
         - Total number of pages
         """
-        user_object_id = ObjectId(user_id)
         skip = (page - 1) * per_page
         
         # Pipeline to get the most recent message for each chat
@@ -178,8 +191,8 @@ class MessagesCollection:
             # Match messages where user is either sender or recipient
             {'$match': {
                 '$or': [
-                    {'sender_id': user_object_id},
-                    {'recipient_id': user_object_id}
+                    {'sender_id': user_id},
+                    {'recipient_id': user_id}
                 ]
             }},
             # Sort by timestamp descending
@@ -188,7 +201,7 @@ class MessagesCollection:
             {'$group': {
                 '_id': {
                     '$cond': [
-                        {'$eq': ['$sender_id', user_object_id]},
+                        {'$eq': ['$sender_id', user_id]},
                         '$recipient_id',
                         '$sender_id'
                     ]
@@ -198,7 +211,7 @@ class MessagesCollection:
                     '$sum': {
                         '$cond': [
                             {'$and': [
-                                {'$eq': ['$recipient_id', user_object_id]},
+                                {'$eq': ['$recipient_id', user_id]},
                                 {'$eq': ['$is_read', False]}
                             ]},
                             1,
@@ -225,7 +238,7 @@ class MessagesCollection:
         for chat in chats:
             other_user = users_collection.find_by_id(str(chat['_id']))
             formatted_chat = {
-                'user_id': str(chat['_id']),  # Convert ObjectId to string
+                'user_id': str(chat['_id']),
                 'username': other_user.username if other_user else 'Unknown User',
                 'unread_count': chat['unread_count']
             }
@@ -235,7 +248,7 @@ class MessagesCollection:
             formatted_chat['last_message'] = {
                 'content': msg['content'],
                 'timestamp': msg['timestamp'].isoformat(),
-                'is_from_me': msg['sender_id'] == user_object_id
+                'is_from_me': msg['sender_id'] == user_id
             }
             # Store original timestamp for sorting
             formatted_chat['sort_timestamp'] = msg['timestamp']
@@ -267,22 +280,19 @@ class MessagesCollection:
         - List of formatted messages with sender information
         - Total number of pages
         """
-        user_object_id = ObjectId(user_id)
-        other_user_object_id = ObjectId(other_user_id)
-
         # Query to match read messages or messages sent by current user
         query = {
             '$and': [
                 {
                     '$or': [
-                        {'sender_id': user_object_id, 'recipient_id': other_user_object_id},
-                        {'sender_id': other_user_object_id, 'recipient_id': user_object_id}
+                        {'sender_id': user_id, 'recipient_id': other_user_id},
+                        {'sender_id': other_user_id, 'recipient_id': user_id}
                     ]
                 },
                 {
                     '$or': [
                         {'is_read': True},
-                        {'sender_id': user_object_id}  # Include all messages sent by current user
+                        {'sender_id': user_id}  # Include all messages sent by current user
                     ]
                 }
             ]
@@ -324,10 +334,10 @@ class MessagesCollection:
                 }
             
             formatted_messages.append({
-                'message_id': str(msg['_id']),
+                'message_id': str(msg['message_id']),
                 'content': msg['content'],
                 'timestamp': msg['timestamp'].isoformat(),
-                'is_from_me': msg['sender_id'] == user_object_id,
+                'is_from_me': msg['sender_id'] == user_id,
                 'sender': user_cache[sender_id]
             })
 
@@ -335,12 +345,9 @@ class MessagesCollection:
     
     def get_chat_unread_count(self, user_id: str, other_user_id: str) -> int:
         """Get the unread message count between two users"""
-        user_object_id = ObjectId(user_id)
-        other_user_object_id = ObjectId(other_user_id)
-        
         count = self.collection.count_documents({
-            'sender_id': other_user_object_id,
-            'recipient_id': user_object_id,
+            'sender_id': other_user_id,
+            'recipient_id': user_id,
             'is_read': False
         })
         
@@ -350,8 +357,8 @@ class MessagesCollection:
         """Delete all messages for a user"""
         result = self.collection.delete_many({
             '$or': [
-                {'sender_id': ObjectId(user_id)},
-                {'recipient_id': ObjectId(user_id)}
+                {'sender_id': user_id},
+                {'recipient_id': user_id}
             ]
         })
         return result.deleted_count

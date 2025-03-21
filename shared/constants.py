@@ -36,6 +36,7 @@ ERROR_SERVER_ERROR = -500
 # Server initialization and leadership error codes
 ERROR_SERVER_INITIALIZING = -501
 ERROR_NOT_LEADER = -502
+ERROR_REPLICATION_FAILED = -503
 
 # Messages
 MESSAGE_OK = "OK"
@@ -48,6 +49,7 @@ MESSAGE_SERVER_ERROR = "Internal server error"
 # Server initialization and leadership error messages
 MESSAGE_SERVER_INITIALIZING = "Server is still initializing, please try again later"
 MESSAGE_NOT_LEADER = "This server is not the leader, please connect to the leader server"
+MESSAGE_REPLICATION_FAILED = "Failed to replicate request to all servers"
 
 # Message Format Mapping
 # Message Types -> Message Formats (see shared/message_format.py)

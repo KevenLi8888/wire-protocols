@@ -26,6 +26,22 @@ service LeaderElectionService {
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
 }
 
+// New service for replica synchronization
+service ReplicaService {
+  // Replicate create account request to replica
+  rpc ReplicateCreateAccount(CreateAccountRequest) returns (BasicResponse);
+  // Replicate login request to replica
+  rpc ReplicateLogin(LoginRequest) returns (BasicResponse);
+  // Replicate delete account request to replica
+  rpc ReplicateDeleteAccount(DeleteAccountRequest) returns (BasicResponse);
+  // Replicate send message request to replica
+  rpc ReplicateSendMessage(SendMessageRequest) returns (BasicResponse);
+  // Replicate get unread messages request to replica
+  rpc ReplicateGetUnreadMessages(GetUnreadMessagesRequest) returns (BasicResponse);
+  // Replicate delete messages request to replica
+  rpc ReplicateDeleteMessages(DeleteMessagesRequest) returns (BasicResponse);
+}
+
 // Basic response for simple operations
 message BasicResponse {
   int32 code = 1;
@@ -37,6 +53,7 @@ message CreateAccountRequest {
   string email = 1;
   string username = 2;
   string password = 3;
+  optional string user_id = 4; // Optional field for user ID
 }
 
 message CreateAccountResponse {
@@ -95,6 +112,7 @@ message SendMessageRequest {
   string content = 1;
   string recipient_id = 2;
   string sender_id = 3;
+  optional string message_id = 4; // Optional field for message ID
 }
 
 message MessageData {

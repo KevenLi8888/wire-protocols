@@ -2,6 +2,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional, TypeVar, Type
 from venv import create
+import uuid
 
 T = TypeVar('T', bound='BaseModel')
 
@@ -23,6 +24,7 @@ class BaseModel:
 class User(BaseModel):
     username: str
     email: str
+    user_id: Optional[str] = None  # Added unique user_id field
     created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
     _id: Optional[str] = None
@@ -34,6 +36,7 @@ class Message(BaseModel):
     recipient_id: str
     content: str
     timestamp: datetime
+    message_id: Optional[str] = None  # Added unique message_id field
     is_read: bool = False
     _id: Optional[str] = None
 

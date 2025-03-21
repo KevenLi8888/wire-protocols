@@ -6,6 +6,7 @@ from shared.models import User
 import logging
 from shared.utils import hash_password
 from tests.unit.database.test_collections import messages_collection
+import uuid
 
 class UserHandler:
     """
@@ -16,6 +17,7 @@ class UserHandler:
     def __init__(self):
         """Initialize UserHandler with Users collection"""
         self.users = UsersCollection()
+        self.messages = MessagesCollection()
 
     def create_account(self, data):
         """
@@ -31,7 +33,7 @@ class UserHandler:
             dict: Response containing status code and message
         """
         try:
-            if not all(key in data for key in ['username', 'email', 'password']):
+            if not all(key in data for key in ['username', 'email', 'password', 'user_id']):
                 return {"code": ERROR_SERVER_ERROR, "message": MESSAGE_SERVER_ERROR}
                 
             user = self.users.find_by_email(data['email'])
@@ -40,6 +42,7 @@ class UserHandler:
             
             # Password is already hashed from client
             self.users.insert_one(User(
+                user_id=data['user_id'],  # Unique user ID
                 username=data['username'], 
                 email=data['email'], 
                 password_hash=data['password'],  # Store hashed password
@@ -71,13 +74,13 @@ class UserHandler:
             if not user or user.password_hash != data['password']:
                 return {"code": ERROR_INVALID_CREDENTIALS, "message": MESSAGE_INVALID_CREDENTIALS}
             
-            self.users.update_last_login(str(user._id))
+            self.users.update_last_login(str(user.user_id))
             return {
                 "code": SUCCESS, 
                 "message": MESSAGE_OK,
                 "data": {
                     "user": {
-                        "_id": str(user._id),
+                        "user_id": user.user_id,
                         "username": user.username,
                         "email": user.email
                     }
@@ -101,7 +104,7 @@ class UserHandler:
             users = self.users.get_all_users()
             
             users_data = [{
-                '_id': str(user._id),
+                'user_id': user.user_id,
                 'username': user.username,
                 'email': user.email
             } for user in users]
@@ -149,9 +152,9 @@ class UserHandler:
             )
             
             users_data = [{
-                '_id': str(user._id),
-                'username': user.username,
-                'email': user.email
+                "user_id": user.user_id,
+                "username": user.username,
+                "email": user.email
             } for user in users]
             
             return {
@@ -195,8 +198,8 @@ class UserHandler:
                     "message": MESSAGE_INVALID_CREDENTIALS
                 }
             messages_collection = MessagesCollection()
-            messages_collection.delete_user_messages(str(user._id))
-            self.users.delete_one(str(user._id))
+            messages_collection.delete_user_messages(str(user.user_id))
+            self.users.delete_one(str(user.user_id))
             return {
                 "code": SUCCESS,
                 "message": MESSAGE_OK

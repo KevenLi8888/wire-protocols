@@ -689,3 +689,299 @@ class LeaderElectionService(object):
             timeout,
             metadata,
             _registered_method=True)
+
+
+class ReplicaServiceStub(object):
+    """New service for replica synchronization
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.ReplicateCreateAccount = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateCreateAccount',
+                request_serializer=generated_dot_chat__pb2.CreateAccountRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+        self.ReplicateLogin = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateLogin',
+                request_serializer=generated_dot_chat__pb2.LoginRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+        self.ReplicateDeleteAccount = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateDeleteAccount',
+                request_serializer=generated_dot_chat__pb2.DeleteAccountRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+        self.ReplicateSendMessage = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateSendMessage',
+                request_serializer=generated_dot_chat__pb2.SendMessageRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+        self.ReplicateGetUnreadMessages = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateGetUnreadMessages',
+                request_serializer=generated_dot_chat__pb2.GetUnreadMessagesRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+        self.ReplicateDeleteMessages = channel.unary_unary(
+                '/chat.ReplicaService/ReplicateDeleteMessages',
+                request_serializer=generated_dot_chat__pb2.DeleteMessagesRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
+                _registered_method=True)
+
+
+class ReplicaServiceServicer(object):
+    """New service for replica synchronization
+    """
+
+    def ReplicateCreateAccount(self, request, context):
+        """Replicate create account request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplicateLogin(self, request, context):
+        """Replicate login request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplicateDeleteAccount(self, request, context):
+        """Replicate delete account request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplicateSendMessage(self, request, context):
+        """Replicate send message request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplicateGetUnreadMessages(self, request, context):
+        """Replicate get unread messages request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReplicateDeleteMessages(self, request, context):
+        """Replicate delete messages request to replica
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ReplicaServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'ReplicateCreateAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateCreateAccount,
+                    request_deserializer=generated_dot_chat__pb2.CreateAccountRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+            'ReplicateLogin': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateLogin,
+                    request_deserializer=generated_dot_chat__pb2.LoginRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+            'ReplicateDeleteAccount': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateDeleteAccount,
+                    request_deserializer=generated_dot_chat__pb2.DeleteAccountRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+            'ReplicateSendMessage': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateSendMessage,
+                    request_deserializer=generated_dot_chat__pb2.SendMessageRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+            'ReplicateGetUnreadMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateGetUnreadMessages,
+                    request_deserializer=generated_dot_chat__pb2.GetUnreadMessagesRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+            'ReplicateDeleteMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReplicateDeleteMessages,
+                    request_deserializer=generated_dot_chat__pb2.DeleteMessagesRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'chat.ReplicaService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('chat.ReplicaService', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ReplicaService(object):
+    """New service for replica synchronization
+    """
+
+    @staticmethod
+    def ReplicateCreateAccount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateCreateAccount',
+            generated_dot_chat__pb2.CreateAccountRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplicateLogin(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateLogin',
+            generated_dot_chat__pb2.LoginRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplicateDeleteAccount(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateDeleteAccount',
+            generated_dot_chat__pb2.DeleteAccountRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplicateSendMessage(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateSendMessage',
+            generated_dot_chat__pb2.SendMessageRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplicateGetUnreadMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateGetUnreadMessages',
+            generated_dot_chat__pb2.GetUnreadMessagesRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReplicateDeleteMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ReplicaService/ReplicateDeleteMessages',
+            generated_dot_chat__pb2.DeleteMessagesRequest.SerializeToString,
+            generated_dot_chat__pb2.BasicResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)

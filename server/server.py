@@ -24,7 +24,9 @@ class Server:
         Args:
             config_path: Path to configuration file
         """
-        # Add timeout constants near the top of the class
+        self.ELECTION_WAIT_TIME = 5  # seconds
+        self.HEARTBEAT_INTERVAL = 10  # seconds
+        self.HIGHER_SERVER_WAIT_TIME = 5  # seconds
         self.ELECTION_TIMEOUT = 10  # seconds
         self.COORDINATOR_TIMEOUT = 10  # seconds
         self.HEARTBEAT_TIMEOUT = 8  # seconds
@@ -154,9 +156,9 @@ class Server:
             else:
                 self.logger.warning(f"Failed to register server {self.server_id} with registry")
             
-            # Wait for 10 seconds to allow other servers to register
-            self.logger.info("Waiting for 10 seconds to allow other servers to register...")
-            time.sleep(10)
+            # Wait for some time (self.ELECTION_WAIT_TIME) to allow other servers to register
+            self.logger.info(f"Waiting for {self.ELECTION_WAIT_TIME} seconds to allow other servers to register...")
+            time.sleep(self.ELECTION_WAIT_TIME)
             
             # Start election if using gRPC
             if self.protocol_type == 'grpc':
@@ -221,7 +223,7 @@ class Server:
                 self.logger.warning(f"Failed to send election message to server {server_id}: {str(e)}")
         
         # Wait for a short time to see if any higher servers take over
-        time.sleep(5)  # Give higher servers time to send coordinator message
+        time.sleep(self.HIGHER_SERVER_WAIT_TIME)  # Give higher servers time to send coordinator message
         
         # If no responses received from higher servers AND we haven't received a coordinator message,
         # become leader
@@ -232,7 +234,7 @@ class Server:
             # We received responses, wait for coordinator message
             self.logger.info(f"Received responses from higher servers: {responses_received}")
             # Reset election flag after timeout
-            threading.Timer(10, self._reset_election_flag).start()
+            threading.Timer(self.ELECTION_TIMEOUT, self._reset_election_flag).start()
 
     def _discover_servers(self):
         """Discover other servers from the registry"""
@@ -300,6 +302,7 @@ class Server:
                 # Create stubs for different services
                 chat_stub = chat_pb2_grpc.ChatServiceStub(channel)
                 election_stub = chat_pb2_grpc.LeaderElectionServiceStub(channel)
+                replica_stub = chat_pb2_grpc.ReplicaServiceStub(channel)  # Add replica stub
                 
                 # Store connection info
                 self.grpc_connections[server_id] = {
@@ -309,6 +312,7 @@ class Server:
                     'channel': channel,
                     'chat_stub': chat_stub,
                     'election_stub': election_stub,
+                    'replica_stub': replica_stub,  # Store replica stub
                     'is_leader': server['is_leader']
                 }
                 
@@ -346,7 +350,7 @@ class Server:
             servers_collection.reset_all_leader_status()
             # Then set this server as leader
             servers_collection.update_server_leader_status(self.server_id, True)
-            self.logger.info(f"Updated leader status in database for server {self.server_id}")
+            self.logger.info(f"Updated leader status in registry for server {self.server_id}")
         except Exception as e:
             self.logger.error(f"Failed to update leader status: {str(e)}")
         
@@ -388,23 +392,50 @@ class Server:
             with self.election_lock:
                 self.election_in_progress = False
     
-    def _start_leader_health_check(self):
-        """Start periodic health checks of the current leader"""
-        def health_check_task():
-            while True:
-                time.sleep(15)  # Check every 15 seconds
-                self._check_leader_health()
-        
-        health_check_thread = threading.Thread(target=health_check_task, daemon=True)
-        health_check_thread.start()
-        self.logger.info("Started leader health check thread")
-    
+    def _monitor_replicas(self):
+        """Monitor health of replica servers when this server is the leader"""
+        while True:
+            if not self.is_leader:
+                time.sleep(self.HEARTBEAT_INTERVAL)
+                continue
+                
+            # Get current list of servers
+            try:
+                servers_collection = ServersCollection()
+                all_servers = servers_collection.get_all_servers(include_terminated=False)
+                
+                # Check each server except ourselves
+                for server in all_servers:
+                    if server.server_id == self.server_id:
+                        continue
+                        
+                    # Try to contact the replica
+                    if server.server_id in self.grpc_connections:
+                        try:
+                            stub = self.grpc_connections[server.server_id]['election_stub']
+                            request = chat_pb2.HeartbeatRequest(server_id=self.server_id)
+                            
+                            response = stub.Heartbeat(request, timeout=self.HEARTBEAT_TIMEOUT)
+                            
+                            if not response.is_alive:
+                                self.logger.warning(f"Replica {server.server_id} reported not alive, marking as offline")
+                                servers_collection.update_server_status(server.server_id, "OFFLINE")
+                                
+                        except grpc.RpcError as e:
+                            self.logger.warning(f"Replica {server.server_id} unreachable, marking as offline: {str(e)}")
+                            servers_collection.update_server_status(server.server_id, "OFFLINE")
+                            
+            except Exception as e:
+                self.logger.error(f"Error monitoring replicas: {str(e)}")
+                
+            time.sleep(self.HEARTBEAT_INTERVAL)
+
     def _check_leader_health(self):
         """Check if the current leader is alive, start election if not"""
         # Skip if we are the leader or no leader is elected yet
         if self.is_leader or not self.current_leader:
             return
-            
+                
         # Try to contact the leader
         if self.current_leader in self.grpc_connections:
             try:
@@ -415,7 +446,11 @@ class Server:
                 response = stub.Heartbeat(request, timeout=self.HEARTBEAT_TIMEOUT)
                 
                 if not response.is_alive or not response.is_leader:
-                    self.logger.warning(f"Leader {self.current_leader} not functioning properly, starting election")
+                    self.logger.warning(f"Leader {self.current_leader} not functioning properly, marking as offline and starting election")
+                    # Update leader status in registry
+                    servers_collection = ServersCollection()
+                    servers_collection.update_server_status(self.current_leader, "OFFLINE")
+                    servers_collection.update_server_leader_status(self.current_leader, False)
                     self.start_election()
                     
             except grpc.RpcError as e:
@@ -423,10 +458,36 @@ class Server:
                     self.logger.warning(f"Heartbeat request to leader {self.current_leader} timed out after {self.HEARTBEAT_TIMEOUT}s")
                 else:
                     self.logger.warning(f"Leader {self.current_leader} unreachable: {str(e)}")
+                    
+                # Update leader status in registry
+                servers_collection = ServersCollection()
+                servers_collection.update_server_status(self.current_leader, "OFFLINE")
+                servers_collection.update_server_leader_status(self.current_leader, False)
                 self.start_election()
         else:
-            self.logger.warning(f"No connection to leader {self.current_leader}, starting election")
+            self.logger.warning(f"No connection to leader {self.current_leader}, marking as offline and starting election")
+            # Update leader status in registry
+            servers_collection = ServersCollection()
+            servers_collection.update_server_status(self.current_leader, "OFFLINE")
+            servers_collection.update_server_leader_status(self.current_leader, False)
             self.start_election()
+
+    def _start_leader_health_check(self):
+        """Start periodic health checks of the current leader"""
+        def health_check_task():
+            while True:
+                time.sleep(self.HEARTBEAT_INTERVAL)
+                self._check_leader_health()
+        
+        leader_check_thread = threading.Thread(target=health_check_task, daemon=True)
+        leader_check_thread.start()
+        self.logger.info("Started leader health check thread")
+        
+        # If using gRPC, also start replica monitoring thread
+        if self.protocol_type == 'grpc':
+            replica_monitor_thread = threading.Thread(target=self._monitor_replicas, daemon=True)
+            replica_monitor_thread.start()
+            self.logger.info("Started replica monitoring thread")
 
     def start(self):
         """Start the appropriate server based on protocol type"""
@@ -554,12 +615,12 @@ class Server:
             self.communication.send(MSG_ERROR_RESPONSE, response, client_socket)
             return response
     
-    def update_server_status(self, status, termination: bool):
+    def update_server_status(self, status, stopped: bool = False):
         """Update this server's status in the registry
         
         Args:
             status: New status ("ONLINE", "STOPPED", "OFFLINE")
-            termination: Boolean indicating if server is terminating (if it is, then the leader status would be set to False)
+            stopped: Boolean indicating if server is stopping (if it is, then the leader status would be set to False)
         """
         try:
             servers_collection = ServersCollection()
@@ -571,7 +632,7 @@ class Server:
                 
             # Also update leader status if this server is a leader
             if self.is_leader:
-                servers_collection.update_server_leader_status(self.server_id, False if termination else self.is_leader)
+                servers_collection.update_server_leader_status(self.server_id, False if stopped else self.is_leader)
                 
         except Exception as e:
             self.logger.error(f"Error updating server status: {str(e)}", exc_info=True)
@@ -585,7 +646,7 @@ class Server:
             self.update_server_status("STOPPED", True)
         except Exception as e:
             self.logger.error(f"Server error: {str(e)}", exc_info=True)
-            self.update_server_status("OFFLINE", True)
+            self.update_server_status("OFFLINE")
         finally:
             # Close gRPC connections
             for server_id in self.grpc_connections:

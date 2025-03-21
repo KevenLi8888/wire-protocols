@@ -29,9 +29,10 @@ class MessageHandler:
             sender_id = data['sender_id']
             recipient_id = data['recipient_id']
             content = data['content']
+            message_id = data['message_id']
             
             # Store message
-            message_id = self.messages.insert_message(sender_id, recipient_id, content)
+            self.messages.insert_message(sender_id, recipient_id, content, message_id)
             
             message_data = {
                 'code': SUCCESS,
@@ -167,11 +168,11 @@ class MessageHandler:
             messages = self.messages.get_unread_messages(user_id, other_user_id, num_messages)
             
             if messages:
-                message_ids = [msg['_id'] for msg in messages]
+                message_ids = [msg['message_id'] for msg in messages]
                 self.messages.mark_as_read(message_ids)
             
             formatted_messages = [{
-                'message_id': str(msg['_id']),
+                'message_id': str(msg['message_id']),
                 'sender_id': str(msg['sender_id']),
                 'recipient_id': str(msg['recipient_id']),
                 'content': msg['content'],
