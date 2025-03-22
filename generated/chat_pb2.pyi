@@ -336,3 +336,23 @@ class HeartbeatResponse(_message.Message):
     is_alive: bool
     is_leader: bool
     def __init__(self, is_alive: bool = ..., is_leader: bool = ...) -> None: ...
+
+class LeaderInfoRequest(_message.Message):
+    __slots__ = ("client_id",)
+    CLIENT_ID_FIELD_NUMBER: _ClassVar[int]
+    client_id: str
+    def __init__(self, client_id: _Optional[str] = ...) -> None: ...
+
+class LeaderInfoResponse(_message.Message):
+    __slots__ = ("leader_found", "leader_id", "leader_host", "leader_port", "election_in_progress")
+    LEADER_FOUND_FIELD_NUMBER: _ClassVar[int]
+    LEADER_ID_FIELD_NUMBER: _ClassVar[int]
+    LEADER_HOST_FIELD_NUMBER: _ClassVar[int]
+    LEADER_PORT_FIELD_NUMBER: _ClassVar[int]
+    ELECTION_IN_PROGRESS_FIELD_NUMBER: _ClassVar[int]
+    leader_found: bool
+    leader_id: str
+    leader_host: str
+    leader_port: int
+    election_in_progress: bool
+    def __init__(self, leader_found: bool = ..., leader_id: _Optional[str] = ..., leader_host: _Optional[str] = ..., leader_port: _Optional[int] = ..., election_in_progress: bool = ...) -> None: ...

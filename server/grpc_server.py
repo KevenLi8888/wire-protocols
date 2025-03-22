@@ -468,6 +468,69 @@ class LeaderElectionServicer(chat_pb2_grpc.LeaderElectionServiceServicer):
                 is_alive=True,
                 is_leader=False
             )
+    
+    def GetLeaderInfo(self, request, context):
+        """Provide leader information to clients
+        
+        If a leader is known, return its details.
+        If an election is in progress, indicate that in the response.
+        If no leader is known, trigger an election and indicate that.
+        """
+        client_id = request.client_id
+        self.logger.info(f"Received leader info request from client {client_id}")
+        
+        # Check if we know who the leader is
+        leader_id = self.server_instance.current_leader
+        election_in_progress = self.server_instance.election_in_progress
+        
+        # If we don't know who the leader is and no election is in progress, start one
+        if leader_id is None and not election_in_progress:
+            self.logger.info(f"No leader known and no election in progress, starting election")
+            self.server_instance.start_election()
+            return chat_pb2.LeaderInfoResponse(
+                leader_found=False,
+                election_in_progress=True
+            )
+        
+        # If election is in progress, inform the client
+        if election_in_progress:
+            self.logger.info(f"Election currently in progress, notifying client")
+            return chat_pb2.LeaderInfoResponse(
+                leader_found=False,
+                election_in_progress=True
+            )
+        
+        # If we know who the leader is, provide that information
+        if leader_id is not None:
+            # If we are the leader, return our own details
+            if self.server_instance.is_leader:
+                self.logger.info(f"We are the leader, providing our details to client")
+                return chat_pb2.LeaderInfoResponse(
+                    leader_found=True,
+                    leader_id=self.server_instance.server_id,
+                    leader_host=self.server_instance.host,
+                    leader_port=self.server_instance.port,
+                    election_in_progress=False
+                )
+            
+            # Otherwise, find the leader in our connections
+            if leader_id in self.server_instance.grpc_connections:
+                leader_info = self.server_instance.grpc_connections[leader_id]
+                self.logger.info(f"Providing leader {leader_id} details to client")
+                return chat_pb2.LeaderInfoResponse(
+                    leader_found=True,
+                    leader_id=leader_id,
+                    leader_host=leader_info['host'],
+                    leader_port=leader_info['port'],
+                    election_in_progress=False
+                )
+        
+        # If we get here, we couldn't provide leader info for some reason
+        self.logger.warning(f"Could not provide leader info to client {client_id}")
+        return chat_pb2.LeaderInfoResponse(
+            leader_found=False,
+            election_in_progress=False
+        )
 
 class ReplicaServicer(chat_pb2_grpc.ReplicaServiceServicer):
     def __init__(self, logger, server_instance):

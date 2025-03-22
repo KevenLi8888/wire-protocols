@@ -2,7 +2,10 @@ import socket
 import threading
 import argparse
 import logging
-from typing import Optional, Dict, Any
+import random
+import time
+import grpc
+from typing import Optional, Dict, Any, List
 from shared.models import User
 from shared.communication import CommunicationInterface
 from shared.constants import *
@@ -13,6 +16,8 @@ from client.tk_gui import ChatGUI
 from shared.logger import setup_logger
 from client.grpc_client import GRPCClient
 from database.connection import DatabaseManager
+from database.collections import ServersCollection
+from shared.models import Server
 
 class Client:
     def __init__(self, config_path):
@@ -22,9 +27,15 @@ class Client:
         Args:
             config_path (str): Path to the configuration file
         """
+        # Constants for failover
+        self.MAX_FAILOVER_RETRIES = 5
+        self.FAILOVER_RETRY_DELAY = 2  # seconds
+        self.ELECTION_WAIT_TIME = 3  # seconds
+        
         # Initialize core components
         self._init_config(config_path)
         self._init_registry_connection()
+        self._init_known_servers()  # Initialize list of known servers
         self._init_network()
         self._init_handlers()
         self._init_gui()
@@ -79,6 +90,36 @@ class Client:
         except Exception as e:
             self.logger.error(f"Registry connection error: {str(e)}", exc_info=True)
             self.logger.warning("Will use default server settings")
+
+    def _init_known_servers(self):
+        """Initialize list of known server addresses that can be used for failover"""
+        self.known_servers = []
+        
+        try:
+            # Get all servers from registry
+            servers_collection = ServersCollection('registry')
+            all_servers = servers_collection.get_all_servers(include_terminated=False)
+            
+            for server in all_servers:
+                if server.status == 'ONLINE':
+                    self.known_servers.append({
+                        'server_id': server.server_id,
+                        'host': server.host,
+                        'port': server.port,
+                        'is_leader': server.is_leader
+                    })
+            
+            self.logger.info(f"Loaded {len(self.known_servers)} servers from registry")
+        except Exception as e:
+            self.logger.error(f"Error loading server list from registry: {str(e)}", exc_info=True)
+            # If we can't get servers from registry, add default server
+            self.known_servers.append({
+                'server_id': '1',
+                'host': self.host,
+                'port': self.port,
+                'is_leader': True
+            })
+            self.logger.info("Using default server as fallback")
 
     def _init_network(self):
         """Initialize network components based on protocol type"""
@@ -136,27 +177,146 @@ class Client:
         
     # Network operations
     def _fetch_server_details_from_registry(self):
-        """Fetch server details from registry database
+        """Fetch server details from registry database, specifically targeting the leader server.
+        Will retry for 3 times if no leader is found.
         
         Returns:
             dict: Dictionary containing server details like host and port
         """
         try:
-            # TODO: Implement actual registry lookup logic
-            # For now, we are returning a mock implementation
-            # In a real implementation, this would query the registry database
-            # to find available servers based on protocol type, load, etc.
+            self.logger.info("Fetching leader server details from registry database")
+            servers_collection = ServersCollection('registry')
             
-            self.logger.info("Fetching server details from registry database")
+            # Try for 3 times to find a leader
+            retries = 3
+            retry_interval = 5
+            leader = None
+            while retries > 0:
+                leader = servers_collection.get_leader()
+                if leader:
+                    break
+                self.logger.info(f"No leader found, retrying in {retry_interval} second... ({retries} retries left)")
+                import time
+                time.sleep(retry_interval)
+                retries -= 1
             
-            # Mock implementation - will be replaced with actual registry lookup
-            return {
-                'host': '127.0.0.1', 
-                'port': 13572
-            }
+            if leader:
+                self.logger.info(f"Found leader server: {leader.server_id}")
+                return {
+                    'host': leader.host,
+                    'port': leader.port
+                }
+            else:
+                self.logger.error("No leader server found after retries")
+                return None
+                
         except Exception as e:
             self.logger.error(f"Error fetching server details: {str(e)}", exc_info=True)
             return None
+    
+    def _find_leader_from_replicas(self) -> Optional[Dict[str, Any]]:
+        """Find the leader server by asking replicas.
+        
+        This is a failover mechanism when direct registry access is not possible
+        or returns stale information.
+        
+        Returns:
+            dict: Dictionary with leader details (host, port) or None if not found
+        """
+        if not self.known_servers:
+            self.logger.warning("No known servers to query for leader information")
+            return None
+            
+        # Shuffle the list of servers to try them in random order
+        servers_to_try = self.known_servers.copy()
+        random.shuffle(servers_to_try)
+        
+        for server in servers_to_try:
+            try:
+                # Skip the server we're currently connected to (which might be down)
+                if (self.grpc_client and server['host'] == self.grpc_client.host and 
+                    server['port'] == self.grpc_client.port):
+                    continue
+                    
+                self.logger.info(f"Trying to get leader info from server at {server['host']}:{server['port']}")
+                
+                # Create temporary connection to this server to ask for leader info
+                temp_client = GRPCClient(server['host'], server['port'], self.logger)
+                leader_info = temp_client.get_leader_info()
+                
+                if leader_info['found']:
+                    self.logger.info(f"Found leader: {leader_info['leader_id']} at {leader_info['leader_host']}:{leader_info['leader_port']}")
+                    return {
+                        'host': leader_info['leader_host'],
+                        'port': leader_info['leader_port']
+                    }
+                elif leader_info['election_in_progress']:
+                    self.logger.info("Election in progress, waiting before retrying")
+                    # Wait for the election to complete
+                    time.sleep(self.ELECTION_WAIT_TIME)
+                    
+                    # Try this server again after waiting
+                    leader_info = temp_client.get_leader_info()
+                    if leader_info['found']:
+                        self.logger.info(f"Leader elected: {leader_info['leader_id']} at {leader_info['leader_host']}:{leader_info['leader_port']}")
+                        return {
+                            'host': leader_info['leader_host'],
+                            'port': leader_info['leader_port']
+                        }
+            except Exception as e:
+                self.logger.warning(f"Failed to contact server at {server['host']}:{server['port']}: {str(e)}")
+                continue
+                
+        self.logger.error("Could not find leader from any known server")
+        return None
+
+    def _handle_connection_error(self):
+        """
+        Handle connection errors by attempting to find the leader server from replicas.
+        
+        Returns:
+            bool: True if successfully reconnected to leader, False otherwise
+        """
+        self.logger.info("Connection failed, attempting to find new leader")
+        
+        # First try to get the leader from replicas
+        retry_count = 0
+        while retry_count < self.MAX_FAILOVER_RETRIES:
+            # Find the leader from known replicas
+            leader_info = self._find_leader_from_replicas()
+            
+            if leader_info:
+                # Try to connect to the new leader
+                self.logger.info(f"Attempting to connect to leader at {leader_info['host']}:{leader_info['port']}")
+                if self.grpc_client.reconnect(leader_info['host'], leader_info['port']):
+                    self.host = leader_info['host']
+                    self.port = leader_info['port']
+                    self.logger.info(f"Successfully reconnected to leader at {self.host}:{self.port}")
+                    return True
+            
+            # If we couldn't find a leader or connect to it, wait and retry
+            retry_count += 1
+            self.logger.info(f"Retrying in {self.FAILOVER_RETRY_DELAY} seconds... (Attempt {retry_count}/{self.MAX_FAILOVER_RETRIES})")
+            time.sleep(self.FAILOVER_RETRY_DELAY)
+        
+        # If all attempts fail, try one last time with the registry
+        try:
+            self.logger.info("All failover attempts failed, trying registry as last resort")
+            server_details = self._fetch_server_details_from_registry()
+            if server_details:
+                self.logger.info(f"Found leader in registry at {server_details['host']}:{server_details['port']}")
+                if self.grpc_client.reconnect(server_details['host'], server_details['port']):
+                    self.host = server_details['host']
+                    self.port = server_details['port']
+                    self.logger.info(f"Successfully reconnected to leader at {self.host}:{self.port}")
+                    return True
+        except Exception as e:
+            self.logger.error(f"Failed to connect via registry: {str(e)}")
+        
+        # If we get here, we were unable to reconnect
+        self.logger.error("Could not reconnect to any server")
+        self.gui.show_error("Could not connect to server. Please try again later.")
+        return False
 
     def connect(self) -> bool:
         """Establish connection to server based on protocol type"""
@@ -197,11 +357,29 @@ class Client:
         """
         try:
             response = self.communication.send(message_type, data, self.client_socket, self.grpc_client)
+            
             if response and self.protocol_type == 'grpc':
+                # Check for gRPC connection errors in the response
+                if response.get('code') == ERROR_RPC_ERROR or response.get('code') == ERROR_CONNECTION_ERROR:
+                    self.logger.error(f"gRPC connection error detected: {response.get('message')}")
+                    
+                    # Try to find another server and reconnect
+                    if self._handle_connection_error():
+                        # If reconnection successful, retry the original message
+                        self.logger.info("Retrying message after successful reconnection")
+                        self.send_message(message_type, data)
+                        return
+                    else:
+                        # If reconnection failed, show error to user
+                        self.gui.show_error(f"Could not connect to server: {response.get('message')}")
+                        return
+                
                 # Handle gRPC response directly since there's no receive loop
                 self.message_handler.handle_message(message_type + 1, response)
+                
         except Exception as e:
             self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
+            self.gui.show_error(f"Error sending message: {str(e)}")
 
     def receive_messages(self):
         """Continuous message receiving loop.

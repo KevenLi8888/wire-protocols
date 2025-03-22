@@ -552,6 +552,11 @@ class LeaderElectionServiceStub(object):
                 request_serializer=generated_dot_chat__pb2.HeartbeatRequest.SerializeToString,
                 response_deserializer=generated_dot_chat__pb2.HeartbeatResponse.FromString,
                 _registered_method=True)
+        self.GetLeaderInfo = channel.unary_unary(
+                '/chat.LeaderElectionService/GetLeaderInfo',
+                request_serializer=generated_dot_chat__pb2.LeaderInfoRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.LeaderInfoResponse.FromString,
+                _registered_method=True)
 
 
 class LeaderElectionServiceServicer(object):
@@ -579,6 +584,13 @@ class LeaderElectionServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetLeaderInfo(self, request, context):
+        """Client can request current leader info
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_LeaderElectionServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -596,6 +608,11 @@ def add_LeaderElectionServiceServicer_to_server(servicer, server):
                     servicer.Heartbeat,
                     request_deserializer=generated_dot_chat__pb2.HeartbeatRequest.FromString,
                     response_serializer=generated_dot_chat__pb2.HeartbeatResponse.SerializeToString,
+            ),
+            'GetLeaderInfo': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetLeaderInfo,
+                    request_deserializer=generated_dot_chat__pb2.LeaderInfoRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.LeaderInfoResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -680,6 +697,33 @@ class LeaderElectionService(object):
             '/chat.LeaderElectionService/Heartbeat',
             generated_dot_chat__pb2.HeartbeatRequest.SerializeToString,
             generated_dot_chat__pb2.HeartbeatResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetLeaderInfo(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.LeaderElectionService/GetLeaderInfo',
+            generated_dot_chat__pb2.LeaderInfoRequest.SerializeToString,
+            generated_dot_chat__pb2.LeaderInfoResponse.FromString,
             options,
             channel_credentials,
             insecure,

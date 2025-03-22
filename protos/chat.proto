@@ -24,6 +24,8 @@ service LeaderElectionService {
   rpc Coordinator(CoordinatorRequest) returns (CoordinatorResponse);
   // Check if a node is alive
   rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+  // Client can request current leader info
+  rpc GetLeaderInfo(LeaderInfoRequest) returns (LeaderInfoResponse);
 }
 
 // New service for replica synchronization
@@ -246,4 +248,17 @@ message HeartbeatRequest {
 message HeartbeatResponse {
   bool is_alive = 1;
   bool is_leader = 2;
+}
+
+// Leader info request/response
+message LeaderInfoRequest {
+  string client_id = 1;  // Optional ID of the client for tracking
+}
+
+message LeaderInfoResponse {
+  bool leader_found = 1;
+  string leader_id = 2;
+  string leader_host = 3;
+  int32 leader_port = 4;
+  bool election_in_progress = 5;
 }
