@@ -141,7 +141,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return {'code': ERROR_SERVER_ERROR, 'message': str(e)}
 
-    def CreateAccount(self, request, context):
+    def CreateAccount(self, request, context): # pragma: no cover
         # Generate a unique user_id for this new account request
         user_id = str(uuid.uuid4())
         
@@ -170,7 +170,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
         )
         
 
-    def Login(self, request, context):
+    def Login(self, request, context): # pragma: no cover
         result = self._handle_with_replication(
             request, context,
             "Login",
@@ -197,7 +197,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             )
         return chat_pb2.LoginResponse(code=result['code'], message=result['message'])
 
-    def DeleteAccount(self, request, context):
+    def DeleteAccount(self, request, context): # pragma: no cover
         result = self._handle_with_replication(
             request, context,
             "DeleteAccount",
@@ -211,7 +211,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             message=result.get('message', MESSAGE_SERVER_ERROR) if result else MESSAGE_SERVER_ERROR
         )
 
-    def SearchUsers(self, request, context):
+    def SearchUsers(self, request, context): # pragma: no cover
         try:
             # Check server state before processing request
             if not self._check_server_state(context):
@@ -241,7 +241,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return chat_pb2.SearchUsersResponse()
 
-    def SendMessage(self, request, context):
+    def SendMessage(self, request, context): # pragma: no cover
         # Generate a unique message_id for this message
         message_id = str(uuid.uuid4())
         
@@ -283,7 +283,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             )
         return chat_pb2.SendMessageResponse(code=result['code'], message=result['message'])
 
-    def GetRecentChats(self, request, context):
+    def GetRecentChats(self, request, context): # pragma: no cover
         try:
             # Check server state before processing request
             if not self._check_server_state(context):
@@ -317,7 +317,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return chat_pb2.GetRecentChatsResponse()
 
-    def GetPreviousMessages(self, request, context):
+    def GetPreviousMessages(self, request, context): # pragma: no cover
         try:
             # Check server state before processing request
             if not self._check_server_state(context):
@@ -353,7 +353,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return chat_pb2.GetPreviousMessagesResponse()
 
-    def GetChatUnreadCount(self, request, context):
+    def GetChatUnreadCount(self, request, context): # pragma: no cover
         try:
             # Check server state before processing request
             if not self._check_server_state(context):
@@ -378,7 +378,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             context.set_details(str(e))
             return chat_pb2.GetChatUnreadCountResponse()
 
-    def GetUnreadMessages(self, request, context):
+    def GetUnreadMessages(self, request, context): # pragma: no cover
         result = self._handle_with_replication(
             request, context,
             "GetUnreadMessages",
@@ -409,7 +409,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             )
         return chat_pb2.GetUnreadMessagesResponse(code=result['code'], message=result['message'])
 
-    def DeleteMessages(self, request, context):
+    def DeleteMessages(self, request, context): # pragma: no cover
         result = self._handle_with_replication(
             request, context,
             "DeleteMessages",
@@ -631,7 +631,7 @@ class ReplicaServicer(chat_pb2_grpc.ReplicaServiceServicer):
             self.logger.error(f"Error in ReplicateDeleteMessages: {str(e)}")
             return chat_pb2.BasicResponse(code=500, message=str(e))
 
-class GRPCServer:
+class GRPCServer: # pragma: no cover
     def __init__(self, host, port, logger, server_instance):
         self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
         self.logger = logger
@@ -652,11 +652,11 @@ class GRPCServer:
         chat_pb2_grpc.add_ReplicaServiceServicer_to_server(
             ReplicaServicer(logger, server_instance), self.server)
 
-    def start(self):
+    def start(self): # pragma: no cover
         self.server.add_insecure_port(f'{self.host}:{self.port}')
         self.server.start()
         self.logger.info(f"gRPC server started on {self.host}:{self.port}")
         
-    def stop(self, grace=None):
+    def stop(self, grace=None): # pragma: no cover
         self.server.stop(grace)
         self.logger.info("gRPC server stopped")

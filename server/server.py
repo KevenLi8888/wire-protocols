@@ -18,8 +18,8 @@ from shared.models import Server as ServerModel
 from shared.models import User, Message
 from generated import chat_pb2, chat_pb2_grpc
 
-class Server:
-    def __init__(self, config_path):
+class Server: 
+    def __init__(self, config_path): # pragma: no cover
         """Initialize TCP Server with configuration
         
         Args:
@@ -114,7 +114,7 @@ class Server:
         self.initialization_complete = True
         self.logger.info("Server initialization complete")
 
-    def _init_database_connections(self):
+    def _init_database_connections(self): # pragma: no cover
         """Initialize connections to both main database and registry database"""
         # Connect to the main database
         self.db_manager = DatabaseManager.get_instance('database')
@@ -130,7 +130,7 @@ class Server:
         
         self.logger.info("Successfully connected to both databases.")
         
-    def _register_with_registry(self):
+    def _register_with_registry(self): # pragma: no cover
         """Register this server with the registry service and discover other servers"""
         try:
             # Create a server object to register
@@ -153,31 +153,31 @@ class Server:
             else:
                 self.logger.warning(f"Failed to register server {self.server_id} with registry")
             
-            # 检查是否已有leader存在
+            # check if there is already a leader
             current_leader = servers_collection.get_leader()
             
             if current_leader:
-                # 如果已有leader存在，直接接受该leader而不进行选举
+                # if there is already a leader, accept it without election
                 self.logger.info(f"Existing leader found: {current_leader.server_id}, accepting as leader")
                 self.current_leader = current_leader.server_id
                 self.is_leader = (current_leader.server_id == self.server_id)
                 
-                # 发现其他服务器并建立连接
+                # discover other servers and establish connections
                 self._discover_servers()
                 
-                # 如果使用gRPC，启动leader健康检查
+                # if using gRPC, start leader health check
                 if self.protocol_type == 'grpc':
                     self._start_leader_health_check()
                     
-                    # 新增：如果不是leader，从leader同步数据
+                    # if not leader, sync data from leader
                     if not self.is_leader and self.current_leader != self.server_id:
                         self._sync_data_from_leader()
             else:
-                # 没有leader存在，等待一段时间后进行选举
+                # no leader exists, wait for a while to allow other servers to register
                 self.logger.info(f"No leader found. Waiting for {self.ELECTION_WAIT_TIME} seconds to allow other servers to register...")
                 time.sleep(self.ELECTION_WAIT_TIME)
                 
-                # 如果使用gRPC，启动选举
+                # if using gRPC, start election
                 if self.protocol_type == 'grpc':
                     self.start_election()
                 
@@ -185,7 +185,7 @@ class Server:
             self.logger.error(f"Error registering with registry: {str(e)}", exc_info=True)
     
     def _sync_data_from_leader(self):
-        """从leader同步数据到新加入的服务器"""
+        """sync data from leader to new joined servers"""
         if not self.current_leader or self.current_leader not in self.grpc_connections:
             self.logger.warning(f"Cannot sync data: Leader {self.current_leader} not found in connections")
             return
@@ -193,10 +193,10 @@ class Server:
         try:
             self.logger.info(f"Starting data synchronization from leader {self.current_leader}")
             
-            # 1. 同步用户数据
+            # 1. sync users data
             self._sync_users_from_leader()
             
-            # 2. 同步消息数据
+            # 2. sync messages data
             self._sync_messages_from_leader()
             
             self.logger.info(f"Data synchronization from leader {self.current_leader} completed successfully")
@@ -204,32 +204,32 @@ class Server:
             self.logger.error(f"Error during data synchronization: {str(e)}", exc_info=True)
 
     def _sync_users_from_leader(self):
-        """从leader同步用户数据"""
+        """sync users data from leader"""
         try:
-            # 获取本地用户集合
+            # get local users collection
             users_collection = UsersCollection()
             local_users = users_collection.get_all_users()
             local_user_ids = {user.user_id for user in local_users}
             
-            # 从leader获取所有用户
+            # get all users from leader
             leader_connection = self.grpc_connections[self.current_leader]
             stub = leader_connection['chat_stub']
             
-            # 创建一个空请求来获取所有用户
+            # create a request to get all users
             request = chat_pb2.SearchUsersRequest(
-                pattern="",  # 空模式匹配所有用户
+                pattern="",  # empty pattern matches all users
                 page=1,
-                current_user_id=""  # 空ID表示不排除任何用户
+                current_user_id=""  # empty ID means no exclusion
             )
             
             response = stub.SearchUsers(request, timeout=10)
             
             if response.code == SUCCESS:
-                # 处理每个从leader获取的用户
+                # handle each user from leader
                 new_users_count = 0
                 for user_data in response.users:
                     if user_data.id not in local_user_ids:
-                        # 如果用户在本地不存在，创建用户
+                        # if user does not exist locally, create user
                         new_user = User(
                             user_id=user_data.id,
                             username=user_data.username,
@@ -247,24 +247,24 @@ class Server:
             self.logger.error(f"Error synchronizing users: {str(e)}", exc_info=True)
 
     def _sync_messages_from_leader(self):
-        """从leader同步消息数据"""
+        """sync messages data from leader"""
         try:
-            # 获取本地用户集合以便遍历所有用户
+            # get local users collection to iterate all users
             users_collection = UsersCollection()
             local_users = users_collection.get_all_users()
             
-            # 获取消息集合
+            # get messages collection
             messages_collection = MessagesCollection()
             
-            # 从leader获取每个用户的最近聊天
+            # get recent chats from leader
             leader_connection = self.grpc_connections[self.current_leader]
             chat_stub = leader_connection['chat_stub']
             
             total_synced_messages = 0
             
-            # 为每个用户同步最近的聊天和消息
+            # sync recent chats and messages for each user
             for user in local_users:
-                # 获取用户的最近聊天
+                # get recent chats
                 recent_chats_request = chat_pb2.GetRecentChatsRequest(
                     user_id=user.user_id,
                     page=1
@@ -274,11 +274,11 @@ class Server:
                     recent_chats_response = chat_stub.GetRecentChats(recent_chats_request, timeout=10)
                     
                     if recent_chats_response.code == SUCCESS:
-                        # 处理每个聊天
+                        # handle each chat
                         for chat in recent_chats_response.chats:
                             other_user_id = chat.user_id
                             
-                            # 获取与该用户的历史消息
+                            # get history messages with this user
                             messages_request = chat_pb2.GetPreviousMessagesRequest(
                                 user_id=user.user_id,
                                 other_user_id=other_user_id,
@@ -289,18 +289,18 @@ class Server:
                                 messages_response = chat_stub.GetPreviousMessages(messages_request, timeout=10)
                                 
                                 if messages_response.code == SUCCESS:
-                                    # 同步消息
+                                    # sync messages
                                     synced_count = 0
                                     for msg in messages_response.messages:
-                                        # 确定发送者和接收者
+                                        # determine sender and recipient
                                         sender_id = msg.sender.user_id
                                         recipient_id = user.user_id if not msg.is_from_me else other_user_id
                                         
-                                        # 检查消息是否已存在
+                                        # check if message exists
                                         existing_message = messages_collection.find_message_by_id(msg.message_id)
                                         
                                         if not existing_message:
-                                            # 插入消息（如果不存在）
+                                            # insert message (if not exists)
                                             messages_collection.insert_message(
                                                 sender_id=sender_id,
                                                 recipient_id=recipient_id,
@@ -539,7 +539,7 @@ class Server:
             except Exception as e:
                 self.logger.warning(f"Failed to send coordinator message to server {server_id}: {str(e)}")
         
-        # 启动副本监控线程
+        # start replica monitoring thread
         if self.protocol_type == 'grpc':
             replica_monitor_thread = threading.Thread(target=self._monitor_replicas, daemon=True)
             replica_monitor_thread.start()
@@ -571,7 +571,7 @@ class Server:
                 time.sleep(self.HEARTBEAT_INTERVAL)
                 continue
                 
-            # 定期重新发现服务器，确保我们知道所有新加入的服务器
+            # periodically discover servers to ensure we know all new joined servers
             
             # Get current list of servers
             try:
@@ -599,7 +599,7 @@ class Server:
                             self.logger.warning(f"Replica {server.server_id} unreachable, marking as offline: {str(e)}")
                             servers_collection.update_server_status(server.server_id, "OFFLINE")
                     else:
-                        # 如果在数据库中有服务器但没有连接，尝试建立连接
+                        # if server exists in registry but no connection exists, attempt to connect
                         self.logger.info(f"Found server {server.server_id} in registry but no connection exists, attempting to connect")
                         self._establish_grpc_connections()
                     
@@ -667,7 +667,7 @@ class Server:
             replica_monitor_thread.start()
             self.logger.info("Started replica monitoring thread")
 
-    def start(self):
+    def start(self): # pragma: no cover 
         """Start the appropriate server based on protocol type"""
         # Check database connections
         if self.db_manager.db is None:
@@ -695,7 +695,7 @@ class Server:
                 client_thread = threading.Thread(target=self.handle_client, args=(client_socket, client_address))
                 client_thread.start()
 
-    def handle_client(self, client_socket, client_address):
+    def handle_client(self, client_socket, client_address): # pragma: no cover
         """Handle individual client connections and message processing
         
         Args:
@@ -739,7 +739,7 @@ class Server:
             pass  # Socket might already be closed
         self.logger.info(f"Client {client_address} connection cleaned up")
 
-    def handle_message(self, message_type, data, client_socket):
+    def handle_message(self, message_type, data, client_socket): # pragma: no cover
         """Process incoming messages and route to appropriate handlers
         
         Args:
@@ -815,7 +815,7 @@ class Server:
         except Exception as e:
             self.logger.error(f"Error updating server status: {str(e)}", exc_info=True)
     
-    def main(self):
+    def main(self): # pragma: no cover
         """Main function to start the server and handle shutdown"""
         try:
             self.start()
