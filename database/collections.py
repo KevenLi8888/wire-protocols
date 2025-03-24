@@ -68,7 +68,8 @@ class UsersCollection:
 
     def get_all_users(self) -> list[User]:
         """Retrieve all users from the database"""
-        users = self.collection.find({}, {'user_id': 1, 'username': 1, 'email': 1})
+        # users = self.collection.find({}, {'user_id': 1, 'username': 1, 'email': 1})
+        users = self.collection.find()
         return [u for u in (User.from_dict(user) for user in users) if u is not None]
     
     def search_users_by_username(self, current_user_id: str, filter_str: str) -> list[User]:
@@ -93,7 +94,7 @@ class UsersCollection:
         
         users = self.collection.find(
             query,
-            {'user_id': 1, 'username': 1, 'email': 1}
+            {'user_id': 1, 'username': 1, 'email': 1, 'password_hash': 1}
         ).skip(skip).limit(per_page)
         
         return [u for u in (User.from_dict(user) for user in users) if u is not None], total_pages
@@ -362,6 +363,10 @@ class MessagesCollection:
             ]
         })
         return result.deleted_count
+
+    def find_message_by_id(self, message_id: str) -> Optional[dict]:
+        """根据消息ID查找消息"""
+        return self.collection.find_one({"message_id": message_id})
 
 class ServersCollection:
     """

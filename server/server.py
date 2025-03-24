@@ -5,7 +5,7 @@ import logging
 import time
 import grpc
 from datetime import datetime
-from database.collections import UsersCollection, ServersCollection
+from database.collections import UsersCollection, ServersCollection, MessagesCollection
 from database.connection import DatabaseManager
 from config.config import Config
 from shared.communication import CommunicationInterface
@@ -15,6 +15,7 @@ from shared.logger import setup_logger
 from server.handlers.message_handler import MessageHandler
 from server.grpc_server import GRPCServer
 from shared.models import Server as ServerModel
+from shared.models import User, Message
 from generated import chat_pb2, chat_pb2_grpc
 
 class Server:
@@ -167,6 +168,10 @@ class Server:
                 # 如果使用gRPC，启动leader健康检查
                 if self.protocol_type == 'grpc':
                     self._start_leader_health_check()
+                    
+                    # 新增：如果不是leader，从leader同步数据
+                    if not self.is_leader and self.current_leader != self.server_id:
+                        self._sync_data_from_leader()
             else:
                 # 没有leader存在，等待一段时间后进行选举
                 self.logger.info(f"No leader found. Waiting for {self.ELECTION_WAIT_TIME} seconds to allow other servers to register...")
@@ -179,6 +184,147 @@ class Server:
         except Exception as e:
             self.logger.error(f"Error registering with registry: {str(e)}", exc_info=True)
     
+    def _sync_data_from_leader(self):
+        """从leader同步数据到新加入的服务器"""
+        if not self.current_leader or self.current_leader not in self.grpc_connections:
+            self.logger.warning(f"Cannot sync data: Leader {self.current_leader} not found in connections")
+            return
+        
+        try:
+            self.logger.info(f"Starting data synchronization from leader {self.current_leader}")
+            
+            # 1. 同步用户数据
+            self._sync_users_from_leader()
+            
+            # 2. 同步消息数据
+            self._sync_messages_from_leader()
+            
+            self.logger.info(f"Data synchronization from leader {self.current_leader} completed successfully")
+        except Exception as e:
+            self.logger.error(f"Error during data synchronization: {str(e)}", exc_info=True)
+
+    def _sync_users_from_leader(self):
+        """从leader同步用户数据"""
+        try:
+            # 获取本地用户集合
+            users_collection = UsersCollection()
+            local_users = users_collection.get_all_users()
+            local_user_ids = {user.user_id for user in local_users}
+            
+            # 从leader获取所有用户
+            leader_connection = self.grpc_connections[self.current_leader]
+            stub = leader_connection['chat_stub']
+            
+            # 创建一个空请求来获取所有用户
+            request = chat_pb2.SearchUsersRequest(
+                pattern="",  # 空模式匹配所有用户
+                page=1,
+                current_user_id=""  # 空ID表示不排除任何用户
+            )
+            
+            response = stub.SearchUsers(request, timeout=10)
+            
+            if response.code == SUCCESS:
+                # 处理每个从leader获取的用户
+                new_users_count = 0
+                for user_data in response.users:
+                    if user_data.id not in local_user_ids:
+                        # 如果用户在本地不存在，创建用户
+                        new_user = User(
+                            user_id=user_data.id,
+                            username=user_data.username,
+                            email=user_data.email,
+                            password_hash=user_data.password_hash  
+                        )
+                        users_collection.insert_one(new_user)
+                        self.logger.info(f"Synchronized user: {user_data.username} (ID: {user_data.id})")
+                        new_users_count += 1
+                
+                self.logger.info(f"User synchronization completed. Added {new_users_count} new users out of {len(response.users)} total users.")
+            else:
+                self.logger.warning(f"Failed to get users from leader: {response.message}")
+        except Exception as e:
+            self.logger.error(f"Error synchronizing users: {str(e)}", exc_info=True)
+
+    def _sync_messages_from_leader(self):
+        """从leader同步消息数据"""
+        try:
+            # 获取本地用户集合以便遍历所有用户
+            users_collection = UsersCollection()
+            local_users = users_collection.get_all_users()
+            
+            # 获取消息集合
+            messages_collection = MessagesCollection()
+            
+            # 从leader获取每个用户的最近聊天
+            leader_connection = self.grpc_connections[self.current_leader]
+            chat_stub = leader_connection['chat_stub']
+            
+            total_synced_messages = 0
+            
+            # 为每个用户同步最近的聊天和消息
+            for user in local_users:
+                # 获取用户的最近聊天
+                recent_chats_request = chat_pb2.GetRecentChatsRequest(
+                    user_id=user.user_id,
+                    page=1
+                )
+                
+                try:
+                    recent_chats_response = chat_stub.GetRecentChats(recent_chats_request, timeout=10)
+                    
+                    if recent_chats_response.code == SUCCESS:
+                        # 处理每个聊天
+                        for chat in recent_chats_response.chats:
+                            other_user_id = chat.user_id
+                            
+                            # 获取与该用户的历史消息
+                            messages_request = chat_pb2.GetPreviousMessagesRequest(
+                                user_id=user.user_id,
+                                other_user_id=other_user_id,
+                                page=1
+                            )
+                            
+                            try:
+                                messages_response = chat_stub.GetPreviousMessages(messages_request, timeout=10)
+                                
+                                if messages_response.code == SUCCESS:
+                                    # 同步消息
+                                    synced_count = 0
+                                    for msg in messages_response.messages:
+                                        # 确定发送者和接收者
+                                        sender_id = msg.sender.user_id
+                                        recipient_id = user.user_id if not msg.is_from_me else other_user_id
+                                        
+                                        # 检查消息是否已存在
+                                        existing_message = messages_collection.find_message_by_id(msg.message_id)
+                                        
+                                        if not existing_message:
+                                            # 插入消息（如果不存在）
+                                            messages_collection.insert_message(
+                                                sender_id=sender_id,
+                                                recipient_id=recipient_id,
+                                                content=msg.content,
+                                                message_id=msg.message_id
+                                            )
+                                            synced_count += 1
+                                    
+                                    if synced_count > 0:
+                                        self.logger.info(f"Synchronized {synced_count} new messages between {user.user_id} and {other_user_id}")
+                                        total_synced_messages += synced_count
+                                else:
+                                    self.logger.warning(f"Failed to get messages for user {user.user_id} with {other_user_id}: {messages_response.message}")
+                            except Exception as e:
+                                self.logger.error(f"Error getting messages for user {user.user_id} with {other_user_id}: {str(e)}")
+                    else:
+                        self.logger.warning(f"Failed to get recent chats for user {user.user_id}: {recent_chats_response.message}")
+                except Exception as e:
+                    self.logger.error(f"Error getting recent chats for user {user.user_id}: {str(e)}")
+                
+            self.logger.info(f"Message synchronization completed. Added {total_synced_messages} new messages.")
+        except Exception as e:
+            self.logger.error(f"Error in message synchronization: {str(e)}", exc_info=True)
+
     def start_election(self):
         """Start leader election using Bully algorithm"""
         with self.election_lock:
@@ -236,6 +382,8 @@ class Server:
             
             if not self.is_leader:
                 self._start_leader_health_check()
+                time.sleep(3)
+                self._sync_data_from_leader()
         
         # Wait for a short time to see if any higher servers take over
         time.sleep(self.HIGHER_SERVER_WAIT_TIME)  # Give higher servers time to send coordinator message

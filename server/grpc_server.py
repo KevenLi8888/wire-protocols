@@ -229,7 +229,8 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                     users=[chat_pb2.UserData(
                         id=str(user['user_id']),
                         username=user['username'],
-                        email=user['email']
+                        email=user['email'],
+                        password_hash=user['password_hash']
                     ) for user in result['data']['users']],
                     total_pages=result['data']['total_pages']
                 )

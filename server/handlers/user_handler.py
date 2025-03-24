@@ -154,7 +154,8 @@ class UserHandler:
             users_data = [{
                 "user_id": user.user_id,
                 "username": user.username,
-                "email": user.email
+                "email": user.email,
+                "password_hash": user.password_hash
             } for user in users]
             
             return {
