@@ -109,10 +109,6 @@ class Server:
         # Register server with registry service
         self._register_with_registry()
         
-        # Start periodic health check of leader
-        if self.protocol_type == 'grpc':
-            self._start_leader_health_check()
-            
         # Mark initialization as complete
         self.initialization_complete = True
         self.logger.info("Server initialization complete")
@@ -156,13 +152,29 @@ class Server:
             else:
                 self.logger.warning(f"Failed to register server {self.server_id} with registry")
             
-            # Wait for some time (self.ELECTION_WAIT_TIME) to allow other servers to register
-            self.logger.info(f"Waiting for {self.ELECTION_WAIT_TIME} seconds to allow other servers to register...")
-            time.sleep(self.ELECTION_WAIT_TIME)
+            # 检查是否已有leader存在
+            current_leader = servers_collection.get_leader()
             
-            # Start election if using gRPC
-            if self.protocol_type == 'grpc':
-                self.start_election()
+            if current_leader:
+                # 如果已有leader存在，直接接受该leader而不进行选举
+                self.logger.info(f"Existing leader found: {current_leader.server_id}, accepting as leader")
+                self.current_leader = current_leader.server_id
+                self.is_leader = (current_leader.server_id == self.server_id)
+                
+                # 发现其他服务器并建立连接
+                self._discover_servers()
+                
+                # 如果使用gRPC，启动leader健康检查
+                if self.protocol_type == 'grpc':
+                    self._start_leader_health_check()
+            else:
+                # 没有leader存在，等待一段时间后进行选举
+                self.logger.info(f"No leader found. Waiting for {self.ELECTION_WAIT_TIME} seconds to allow other servers to register...")
+                time.sleep(self.ELECTION_WAIT_TIME)
+                
+                # 如果使用gRPC，启动选举
+                if self.protocol_type == 'grpc':
+                    self.start_election()
                 
         except Exception as e:
             self.logger.error(f"Error registering with registry: {str(e)}", exc_info=True)
@@ -221,6 +233,9 @@ class Server:
                     
             except Exception as e:
                 self.logger.warning(f"Failed to send election message to server {server_id}: {str(e)}")
+            
+            if not self.is_leader:
+                self._start_leader_health_check()
         
         # Wait for a short time to see if any higher servers take over
         time.sleep(self.HIGHER_SERVER_WAIT_TIME)  # Give higher servers time to send coordinator message
@@ -241,6 +256,7 @@ class Server:
         try:
             servers_collection = ServersCollection()
             all_servers = servers_collection.get_all_servers()
+            # print(all_servers)
             
             # Clear current server list
             self.other_servers = []
@@ -375,6 +391,12 @@ class Server:
             except Exception as e:
                 self.logger.warning(f"Failed to send coordinator message to server {server_id}: {str(e)}")
         
+        # 启动副本监控线程
+        if self.protocol_type == 'grpc':
+            replica_monitor_thread = threading.Thread(target=self._monitor_replicas, daemon=True)
+            replica_monitor_thread.start()
+            self.logger.info("Started replica monitoring thread as leader")
+        
         with self.election_lock:
             self.election_in_progress = False
             
@@ -395,10 +417,14 @@ class Server:
     def _monitor_replicas(self):
         """Monitor health of replica servers when this server is the leader"""
         while True:
+            self._discover_servers()
+            # print("monitor replicas")
             if not self.is_leader:
                 time.sleep(self.HEARTBEAT_INTERVAL)
                 continue
                 
+            # 定期重新发现服务器，确保我们知道所有新加入的服务器
+            
             # Get current list of servers
             try:
                 servers_collection = ServersCollection()
@@ -424,7 +450,11 @@ class Server:
                         except grpc.RpcError as e:
                             self.logger.warning(f"Replica {server.server_id} unreachable, marking as offline: {str(e)}")
                             servers_collection.update_server_status(server.server_id, "OFFLINE")
-                            
+                    else:
+                        # 如果在数据库中有服务器但没有连接，尝试建立连接
+                        self.logger.info(f"Found server {server.server_id} in registry but no connection exists, attempting to connect")
+                        self._establish_grpc_connections()
+                    
             except Exception as e:
                 self.logger.error(f"Error monitoring replicas: {str(e)}")
                 

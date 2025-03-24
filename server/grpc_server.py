@@ -88,6 +88,7 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
 
         # Create and start a thread for each replica
         for server_id, connection in self.server_instance.grpc_connections.items():
+            # print(server_id, connection)
             if server_id == self.server_instance.server_id:  # Don't propagate to self
                 continue
                 
