@@ -106,6 +106,20 @@ class UsersCollection:
         except:
             return None
 
+    def clear_all_users(self) -> bool:
+        """Delete all users from the collection
+        
+        Returns:
+            bool: True if deletion was successful
+        """
+        try:
+            result = self.collection.delete_many({})
+            return result.acknowledged
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to clear users collection: {str(e)}")
+            return False
+
 class MessagesCollection:
     """
     Handles all database operations related to messages between users.
@@ -380,6 +394,20 @@ class MessagesCollection:
         """
         messages = self.collection.find({})
         return [msg for msg in messages]
+
+    def clear_all_messages(self) -> bool:
+        """Delete all messages from the collection
+        
+        Returns:
+            bool: True if deletion was successful
+        """
+        try:
+            result = self.collection.delete_many({})
+            return result.acknowledged
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to clear messages collection: {str(e)}")
+            return False
 
 class ServersCollection:
     """

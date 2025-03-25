@@ -208,8 +208,6 @@ class Server:
         try:
             # get local users collection
             users_collection = UsersCollection()
-            local_users = users_collection.get_all_users()
-            local_user_ids = {user.user_id for user in local_users}
             
             # get all users from leader
             leader_connection = self.grpc_connections[self.current_leader]
@@ -220,24 +218,26 @@ class Server:
             response = stub.GetAllUsers(request, timeout=10)
             
             if response.code == SUCCESS:
-                # handle each user from leader
+                # Clear all existing users first
+                self.logger.info("Clearing existing user data before synchronization")
+                users_collection.clear_all_users()
+                
+                # Insert all users from leader
                 new_users_count = 0
                 for user_data in response.users:
-                    if user_data.id not in local_user_ids:
-                        # if user does not exist locally, create user
-                        new_user = User(
-                            user_id=user_data.id,
-                            username=user_data.username,
-                            email=user_data.email,
-                            password_hash=user_data.password_hash,
-                            created_at=datetime.fromisoformat(user_data.created_at) if user_data.created_at else None,
-                            last_login=datetime.fromisoformat(user_data.last_login) if user_data.last_login else None,
-                        )
-                        users_collection.insert_one(new_user)
-                        self.logger.info(f"Synchronized user: {user_data.username} (ID: {user_data.id})")
-                        new_users_count += 1
+                    new_user = User(
+                        user_id=user_data.id,
+                        username=user_data.username,
+                        email=user_data.email,
+                        password_hash=user_data.password_hash,
+                        created_at=datetime.fromisoformat(user_data.created_at) if user_data.created_at else None,
+                        last_login=datetime.fromisoformat(user_data.last_login) if user_data.last_login else None,
+                    )
+                    users_collection.insert_one(new_user)
+                    self.logger.info(f"Synchronized user: {user_data.username} (ID: {user_data.id})")
+                    new_users_count += 1
                 
-                self.logger.info(f"User synchronization completed. Added {new_users_count} new users out of {len(response.users)} total users.")
+                self.logger.info(f"User synchronization completed. Added {new_users_count} users from leader.")
             else:
                 self.logger.warning(f"Failed to get users from leader: {response.message}")
         except Exception as e:
@@ -257,25 +257,24 @@ class Server:
             response = chat_stub.GetAllMessages(request, timeout=10)
             
             if response.code == SUCCESS:
-                # handle each message from leader
+                # Clear all existing messages first
+                self.logger.info("Clearing existing messages before synchronization")
+                messages_collection.clear_all_messages()
+                
+                # Insert all messages from leader
                 new_messages_count = 0
                 for msg in response.messages:
-                    # Check if message exists
-                    existing_message = messages_collection.find_message_by_id(msg.message_id)
-                    
-                    if not existing_message:
-                        # Insert message if it doesn't exist
-                        messages_collection.insert_message(
-                            sender_id=msg.sender_id,
-                            recipient_id=msg.recipient_id,
-                            content=msg.content,
-                            message_id=msg.message_id,
-                            time=datetime.fromisoformat(msg.timestamp),
-                            is_read=msg.is_read
-                        )
-                        new_messages_count += 1
-                        
-                self.logger.info(f"Message synchronization completed. Added {new_messages_count} new messages out of {len(response.messages)} total messages.")
+                    messages_collection.insert_message(
+                        sender_id=msg.sender_id,
+                        recipient_id=msg.recipient_id,
+                        content=msg.content,
+                        message_id=msg.message_id,
+                        time=datetime.fromisoformat(msg.timestamp),
+                        is_read=msg.is_read
+                    )
+                    new_messages_count += 1
+                
+                self.logger.info(f"Message synchronization completed. Added {new_messages_count} messages from leader.")
             else:
                 self.logger.warning(f"Failed to get messages from leader: {response.message}")
         except Exception as e:
