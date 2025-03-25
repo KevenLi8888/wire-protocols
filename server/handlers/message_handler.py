@@ -1,4 +1,5 @@
 from datetime import datetime
+import time
 from database.collections import MessagesCollection
 from shared.constants import *
 import logging
@@ -30,9 +31,10 @@ class MessageHandler:
             recipient_id = data['recipient_id']
             content = data['content']
             message_id = data['message_id']
+            timestamp = data['timestamp']
             
             # Store message
-            self.messages.insert_message(sender_id, recipient_id, content, message_id)
+            self.messages.insert_message(sender_id, recipient_id, content, message_id, time=datetime.fromisoformat(timestamp) if timestamp else datetime.now())
             
             message_data = {
                 'code': SUCCESS,
@@ -42,13 +44,13 @@ class MessageHandler:
                     'sender_id': sender_id,
                     'recipient_id': recipient_id,
                     'content': content,
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': timestamp
                 }
             }
             return message_data
             
         except Exception as e:
-            self.logger.error(f"Error sending message: {str(e)}")
+            self.logger.error(f"Error sending message: {str(e)}", exc_info=True)
             return {
                 'code': ERROR_SERVER_ERROR,
                 'message': MESSAGE_SERVER_ERROR
@@ -220,6 +222,38 @@ class MessageHandler:
             
         except Exception as e:
             self.logger.error(f"Error deleting message: {str(e)}")
+            return {
+                'code': ERROR_SERVER_ERROR,
+                'message': MESSAGE_SERVER_ERROR
+            }
+
+    def get_all_messages(self):
+        """
+        Get all messages with their complete data for synchronization purposes.
+        This method is specifically for server-to-server synchronization.
+        
+        Returns:
+            dict: Response containing all messages' data
+        """
+        try:
+            messages = self.messages.get_all_messages()
+            
+            formatted_messages = [{
+                'message_id': str(msg['message_id']),
+                'sender_id': str(msg['sender_id']),
+                'recipient_id': str(msg['recipient_id']),
+                'content': msg['content'],
+                'timestamp': msg['timestamp'].isoformat(),
+                'is_read': msg.get('is_read', False)
+            } for msg in messages]
+            
+            return {
+                'code': SUCCESS,
+                'message': MESSAGE_OK,
+                'data': formatted_messages
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting all messages for sync: {str(e)}")
             return {
                 'code': ERROR_SERVER_ERROR,
                 'message': MESSAGE_SERVER_ERROR

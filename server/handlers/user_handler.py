@@ -212,3 +212,36 @@ class UserHandler:
                 "message": MESSAGE_SERVER_ERROR
             }
 
+    def get_all_users(self):
+        """
+        Get all users with their complete data for synchronization purposes.
+        This method is specifically for server-to-server synchronization and includes
+        sensitive data like password hashes.
+        
+        Returns:
+            dict: Response containing all users' data including password hashes
+        """
+        try:
+            users = self.users.get_all_users()
+            
+            users_data = [{
+                'user_id': user.user_id,
+                'username': user.username,
+                'email': user.email,
+                'password_hash': user.password_hash,
+                'created_at': user.created_at.isoformat() if user.created_at else None,
+                'last_login': user.last_login.isoformat() if user.last_login else None
+            } for user in users]
+            
+            return {
+                "code": SUCCESS,
+                "message": MESSAGE_OK,
+                "data": users_data
+            }
+        except Exception as e:
+            logging.error(f"Error getting all users for sync: {str(e)}")
+            return {
+                "code": ERROR_SERVER_ERROR,
+                "message": MESSAGE_SERVER_ERROR
+            }
+

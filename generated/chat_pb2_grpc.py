@@ -49,10 +49,15 @@ class ChatServiceStub(object):
                 request_serializer=generated_dot_chat__pb2.DeleteAccountRequest.SerializeToString,
                 response_deserializer=generated_dot_chat__pb2.BasicResponse.FromString,
                 _registered_method=True)
-        self.GetUsers = channel.unary_unary(
-                '/chat.ChatService/GetUsers',
-                request_serializer=generated_dot_chat__pb2.GetUsersRequest.SerializeToString,
-                response_deserializer=generated_dot_chat__pb2.GetUsersResponse.FromString,
+        self.GetAllUsers = channel.unary_unary(
+                '/chat.ChatService/GetAllUsers',
+                request_serializer=generated_dot_chat__pb2.GetAllUsersRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.GetAllUsersResponse.FromString,
+                _registered_method=True)
+        self.GetAllMessages = channel.unary_unary(
+                '/chat.ChatService/GetAllMessages',
+                request_serializer=generated_dot_chat__pb2.GetAllMessagesRequest.SerializeToString,
+                response_deserializer=generated_dot_chat__pb2.GetAllMessagesResponse.FromString,
                 _registered_method=True)
         self.SendMessage = channel.unary_unary(
                 '/chat.ChatService/SendMessage',
@@ -112,8 +117,16 @@ class ChatServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetUsers(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+    def GetAllUsers(self, request, context):
+        """for synchronizing data
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetAllMessages(self, request, context):
+        """for synchronizing data
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -178,10 +191,15 @@ def add_ChatServiceServicer_to_server(servicer, server):
                     request_deserializer=generated_dot_chat__pb2.DeleteAccountRequest.FromString,
                     response_serializer=generated_dot_chat__pb2.BasicResponse.SerializeToString,
             ),
-            'GetUsers': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetUsers,
-                    request_deserializer=generated_dot_chat__pb2.GetUsersRequest.FromString,
-                    response_serializer=generated_dot_chat__pb2.GetUsersResponse.SerializeToString,
+            'GetAllUsers': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAllUsers,
+                    request_deserializer=generated_dot_chat__pb2.GetAllUsersRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.GetAllUsersResponse.SerializeToString,
+            ),
+            'GetAllMessages': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAllMessages,
+                    request_deserializer=generated_dot_chat__pb2.GetAllMessagesRequest.FromString,
+                    response_serializer=generated_dot_chat__pb2.GetAllMessagesResponse.SerializeToString,
             ),
             'SendMessage': grpc.unary_unary_rpc_method_handler(
                     servicer.SendMessage,
@@ -311,7 +329,7 @@ class ChatService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetUsers(request,
+    def GetAllUsers(request,
             target,
             options=(),
             channel_credentials=None,
@@ -324,9 +342,36 @@ class ChatService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/chat.ChatService/GetUsers',
-            generated_dot_chat__pb2.GetUsersRequest.SerializeToString,
-            generated_dot_chat__pb2.GetUsersResponse.FromString,
+            '/chat.ChatService/GetAllUsers',
+            generated_dot_chat__pb2.GetAllUsersRequest.SerializeToString,
+            generated_dot_chat__pb2.GetAllUsersResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAllMessages(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/chat.ChatService/GetAllMessages',
+            generated_dot_chat__pb2.GetAllMessagesRequest.SerializeToString,
+            generated_dot_chat__pb2.GetAllMessagesResponse.FromString,
             options,
             channel_credentials,
             insecure,

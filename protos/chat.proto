@@ -6,7 +6,8 @@ service ChatService {
   rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
   rpc Login(LoginRequest) returns (LoginResponse);
   rpc DeleteAccount(DeleteAccountRequest) returns (BasicResponse);
-  rpc GetUsers(GetUsersRequest) returns (GetUsersResponse);
+  rpc GetAllUsers(GetAllUsersRequest) returns (GetAllUsersResponse); // for synchronizing data
+  rpc GetAllMessages(GetAllMessagesRequest) returns (GetAllMessagesResponse); // for synchronizing data
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   rpc SearchUsers(SearchUsersRequest) returns (SearchUsersResponse);
   rpc GetRecentChats(GetRecentChatsRequest) returns (GetRecentChatsResponse);
@@ -73,6 +74,8 @@ message UserData {
   string username = 2;
   string email = 3;
   string password_hash = 4;
+  string created_at = 5;
+  string last_login = 6;
 }
 
 message LoginResponse {
@@ -87,11 +90,10 @@ message DeleteAccountRequest {
 }
 
 // User Management
-message GetUsersRequest {
-  int32 page = 1;
+message GetAllUsersRequest {
 }
 
-message GetUsersResponse {
+message GetAllUsersResponse {
   int32 code = 1;
   string message = 2;
   repeated UserData users = 3;
@@ -116,6 +118,7 @@ message SendMessageRequest {
   string recipient_id = 2;
   string sender_id = 3;
   optional string message_id = 4; // Optional field for message ID
+  optional string timestamp = 5; // Optional field for timestamp
 }
 
 message MessageData {
@@ -124,6 +127,7 @@ message MessageData {
   string recipient_id = 3;
   string content = 4;
   string timestamp = 5;
+  bool is_read = 6;
 }
 
 message SendMessageResponse {
@@ -223,6 +227,15 @@ message GetUnreadMessagesResponse {
   int32 code = 1;
   string message = 2;
   repeated UnreadMessage messages = 3;
+}
+
+message GetAllMessagesRequest {
+}
+
+message GetAllMessagesResponse {
+  int32 code = 1;
+  string message = 2;
+  repeated MessageData messages = 3;
 }
 
 // Leader Election Messages

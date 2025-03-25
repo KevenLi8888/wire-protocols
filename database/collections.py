@@ -129,19 +129,23 @@ class MessagesCollection:
         self.db = DatabaseManager.get_instance(db_type).db
         self.collection = self.db['messages']
 
-    def insert_message(self, sender_id: str, recipient_id: str, content: str, message_id: str = None) -> Optional[str]:
+    def insert_message(self, sender_id: str, recipient_id: str, content: str, message_id: Optional[str] = None, time: Optional[datetime] = None, is_read: bool = False) -> Optional[str]:
         """Insert a new message and return its ID"""
         # Generate UUID for message_id if not provided
         if not message_id:
             message_id = str(uuid.uuid4())
+        
+
+        if time is None:
+            time = datetime.now()
             
         message = {
             'message_id': message_id,
             'sender_id': sender_id,
             'recipient_id': recipient_id,
             'content': content,
-            'timestamp': datetime.now(),
-            'is_read': False
+            'timestamp': time,
+            'is_read': is_read
         }
         result = self.collection.insert_one(message)
         return message_id if result else None
@@ -367,6 +371,15 @@ class MessagesCollection:
     def find_message_by_id(self, message_id: str) -> Optional[dict]:
         """根据消息ID查找消息"""
         return self.collection.find_one({"message_id": message_id})
+
+    def get_all_messages(self) -> list[dict]:
+        """Get all messages from the database
+        
+        Returns:
+            list[dict]: List of all messages in the database
+        """
+        messages = self.collection.find({})
+        return [msg for msg in messages]
 
 class ServersCollection:
     """

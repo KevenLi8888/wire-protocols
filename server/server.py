@@ -215,14 +215,9 @@ class Server:
             leader_connection = self.grpc_connections[self.current_leader]
             stub = leader_connection['chat_stub']
             
-            # create a request to get all users
-            request = chat_pb2.SearchUsersRequest(
-                pattern="",  # empty pattern matches all users
-                page=1,
-                current_user_id=""  # empty ID means no exclusion
-            )
-            
-            response = stub.SearchUsers(request, timeout=10)
+            # Use GetAllUsers RPC
+            request = chat_pb2.GetAllUsersRequest()
+            response = stub.GetAllUsers(request, timeout=10)
             
             if response.code == SUCCESS:
                 # handle each user from leader
@@ -234,7 +229,9 @@ class Server:
                             user_id=user_data.id,
                             username=user_data.username,
                             email=user_data.email,
-                            password_hash=user_data.password_hash  
+                            password_hash=user_data.password_hash,
+                            created_at=datetime.fromisoformat(user_data.created_at) if user_data.created_at else None,
+                            last_login=datetime.fromisoformat(user_data.last_login) if user_data.last_login else None,
                         )
                         users_collection.insert_one(new_user)
                         self.logger.info(f"Synchronized user: {user_data.username} (ID: {user_data.id})")
@@ -249,79 +246,38 @@ class Server:
     def _sync_messages_from_leader(self):
         """sync messages data from leader"""
         try:
-            # get local users collection to iterate all users
-            users_collection = UsersCollection()
-            local_users = users_collection.get_all_users()
-            
             # get messages collection
             messages_collection = MessagesCollection()
             
-            # get recent chats from leader
+            # Use GetAllMessages RPC
             leader_connection = self.grpc_connections[self.current_leader]
             chat_stub = leader_connection['chat_stub']
             
-            total_synced_messages = 0
+            request = chat_pb2.GetAllMessagesRequest()
+            response = chat_stub.GetAllMessages(request, timeout=10)
             
-            # sync recent chats and messages for each user
-            for user in local_users:
-                # get recent chats
-                recent_chats_request = chat_pb2.GetRecentChatsRequest(
-                    user_id=user.user_id,
-                    page=1
-                )
-                
-                try:
-                    recent_chats_response = chat_stub.GetRecentChats(recent_chats_request, timeout=10)
+            if response.code == SUCCESS:
+                # handle each message from leader
+                new_messages_count = 0
+                for msg in response.messages:
+                    # Check if message exists
+                    existing_message = messages_collection.find_message_by_id(msg.message_id)
                     
-                    if recent_chats_response.code == SUCCESS:
-                        # handle each chat
-                        for chat in recent_chats_response.chats:
-                            other_user_id = chat.user_id
-                            
-                            # get history messages with this user
-                            messages_request = chat_pb2.GetPreviousMessagesRequest(
-                                user_id=user.user_id,
-                                other_user_id=other_user_id,
-                                page=1
-                            )
-                            
-                            try:
-                                messages_response = chat_stub.GetPreviousMessages(messages_request, timeout=10)
-                                
-                                if messages_response.code == SUCCESS:
-                                    # sync messages
-                                    synced_count = 0
-                                    for msg in messages_response.messages:
-                                        # determine sender and recipient
-                                        sender_id = msg.sender.user_id
-                                        recipient_id = user.user_id if not msg.is_from_me else other_user_id
-                                        
-                                        # check if message exists
-                                        existing_message = messages_collection.find_message_by_id(msg.message_id)
-                                        
-                                        if not existing_message:
-                                            # insert message (if not exists)
-                                            messages_collection.insert_message(
-                                                sender_id=sender_id,
-                                                recipient_id=recipient_id,
-                                                content=msg.content,
-                                                message_id=msg.message_id
-                                            )
-                                            synced_count += 1
-                                    
-                                    if synced_count > 0:
-                                        self.logger.info(f"Synchronized {synced_count} new messages between {user.user_id} and {other_user_id}")
-                                        total_synced_messages += synced_count
-                                else:
-                                    self.logger.warning(f"Failed to get messages for user {user.user_id} with {other_user_id}: {messages_response.message}")
-                            except Exception as e:
-                                self.logger.error(f"Error getting messages for user {user.user_id} with {other_user_id}: {str(e)}")
-                    else:
-                        self.logger.warning(f"Failed to get recent chats for user {user.user_id}: {recent_chats_response.message}")
-                except Exception as e:
-                    self.logger.error(f"Error getting recent chats for user {user.user_id}: {str(e)}")
-                
-            self.logger.info(f"Message synchronization completed. Added {total_synced_messages} new messages.")
+                    if not existing_message:
+                        # Insert message if it doesn't exist
+                        messages_collection.insert_message(
+                            sender_id=msg.sender_id,
+                            recipient_id=msg.recipient_id,
+                            content=msg.content,
+                            message_id=msg.message_id,
+                            time=datetime.fromisoformat(msg.timestamp),
+                            is_read=msg.is_read
+                        )
+                        new_messages_count += 1
+                        
+                self.logger.info(f"Message synchronization completed. Added {new_messages_count} new messages out of {len(response.messages)} total messages.")
+            else:
+                self.logger.warning(f"Failed to get messages from leader: {response.message}")
         except Exception as e:
             self.logger.error(f"Error in message synchronization: {str(e)}", exc_info=True)
 

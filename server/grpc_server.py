@@ -9,6 +9,7 @@ from shared.constants import (
 )
 import threading
 import uuid
+from datetime import datetime
 
 class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
     def __init__(self, logger, server_instance):
@@ -211,6 +212,62 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
             message=result.get('message', MESSAGE_SERVER_ERROR) if result else MESSAGE_SERVER_ERROR
         )
 
+    def GetAllUsers(self, request, context): # pragma: no cover
+        try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetAllUsersResponse()
+
+            # Get all users from the database
+            users = self.user_handler.get_all_users()
+            if users['code'] == SUCCESS:
+                return chat_pb2.GetAllUsersResponse(
+                    code=SUCCESS,
+                    message=MESSAGE_OK,
+                    users=[chat_pb2.UserData(
+                        id=str(user['user_id']),
+                        username=user['username'],
+                        email=user['email'],
+                        password_hash=user['password_hash'],
+                        created_at=user['created_at'],
+                        last_login=user['last_login']
+                    ) for user in users['data']]
+                )
+            return chat_pb2.GetAllUsersResponse(code=users['code'], message=users['message'])
+        except Exception as e:
+            self.logger.error(f"Error in GetAllUsers: {str(e)}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return chat_pb2.GetAllUsersResponse(code=ERROR_SERVER_ERROR, message=str(e))
+
+    def GetAllMessages(self, request, context): # pragma: no cover
+        try:
+            # Check server state before processing request
+            if not self._check_server_state(context):
+                return chat_pb2.GetAllMessagesResponse()
+
+            # Get all messages from the database
+            messages = self.message_handler.get_all_messages()
+            if messages['code'] == SUCCESS:
+                return chat_pb2.GetAllMessagesResponse(
+                    code=SUCCESS,
+                    message=MESSAGE_OK,
+                    messages=[chat_pb2.MessageData(
+                        message_id=str(msg['message_id']),
+                        sender_id=str(msg['sender_id']),
+                        recipient_id=str(msg['recipient_id']),
+                        content=msg['content'],
+                        timestamp=msg['timestamp'].isoformat() if isinstance(msg['timestamp'], datetime) else str(msg['timestamp']),
+                        is_read=msg.get('is_read', False)
+                    ) for msg in messages['data']]
+                )
+            return chat_pb2.GetAllMessagesResponse(code=messages['code'], message=messages['message'])
+        except Exception as e:
+            self.logger.error(f"Error in GetAllMessages: {str(e)}")
+            context.set_code(grpc.StatusCode.INTERNAL)
+            context.set_details(str(e))
+            return chat_pb2.GetAllMessagesResponse(code=ERROR_SERVER_ERROR, message=str(e))
+
     def SearchUsers(self, request, context): # pragma: no cover
         try:
             # Check server state before processing request
@@ -244,13 +301,16 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
     def SendMessage(self, request, context): # pragma: no cover
         # Generate a unique message_id for this message
         message_id = str(uuid.uuid4())
+        # Generate timestamp for the message to ensure consistency across replicas
+        timestamp = datetime.now().isoformat()
         
-        # Create a modified request that includes the message_id for replication
+        # Create a modified request that includes the message_id and timestamp for replication
         modified_request = chat_pb2.SendMessageRequest(
             content=request.content,
             recipient_id=request.recipient_id,
             sender_id=request.sender_id,
-            message_id=message_id
+            message_id=message_id,
+            timestamp=timestamp
         )
         
         result = self._handle_with_replication(
@@ -260,7 +320,8 @@ class ChatServiceServicer(chat_pb2_grpc.ChatServiceServicer):
                 'content': req.content,
                 'recipient_id': req.recipient_id,
                 'sender_id': req.sender_id,
-                'message_id': message_id
+                'message_id': message_id,
+                'timestamp': timestamp
             })
         )
         if not result:
@@ -593,7 +654,8 @@ class ReplicaServicer(chat_pb2_grpc.ReplicaServiceServicer):
                 'content': request.content,
                 'recipient_id': request.recipient_id,
                 'sender_id': request.sender_id,
-                'message_id': request.message_id  # Use the ID generated by the leader
+                'message_id': request.message_id,  # Use the ID generated by the leader
+                'timestamp': request.timestamp  # Use the timestamp provided by the leader
             })
             return chat_pb2.BasicResponse(
                 code=result['code'],

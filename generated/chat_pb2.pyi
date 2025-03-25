@@ -42,16 +42,20 @@ class LoginRequest(_message.Message):
     def __init__(self, email: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
 
 class UserData(_message.Message):
-    __slots__ = ("id", "username", "email", "password_hash")
+    __slots__ = ("id", "username", "email", "password_hash", "created_at", "last_login")
     ID_FIELD_NUMBER: _ClassVar[int]
     USERNAME_FIELD_NUMBER: _ClassVar[int]
     EMAIL_FIELD_NUMBER: _ClassVar[int]
     PASSWORD_HASH_FIELD_NUMBER: _ClassVar[int]
+    CREATED_AT_FIELD_NUMBER: _ClassVar[int]
+    LAST_LOGIN_FIELD_NUMBER: _ClassVar[int]
     id: str
     username: str
     email: str
     password_hash: str
-    def __init__(self, id: _Optional[str] = ..., username: _Optional[str] = ..., email: _Optional[str] = ..., password_hash: _Optional[str] = ...) -> None: ...
+    created_at: str
+    last_login: str
+    def __init__(self, id: _Optional[str] = ..., username: _Optional[str] = ..., email: _Optional[str] = ..., password_hash: _Optional[str] = ..., created_at: _Optional[str] = ..., last_login: _Optional[str] = ...) -> None: ...
 
 class LoginResponse(_message.Message):
     __slots__ = ("code", "message", "user")
@@ -71,13 +75,11 @@ class DeleteAccountRequest(_message.Message):
     password: str
     def __init__(self, email: _Optional[str] = ..., password: _Optional[str] = ...) -> None: ...
 
-class GetUsersRequest(_message.Message):
-    __slots__ = ("page",)
-    PAGE_FIELD_NUMBER: _ClassVar[int]
-    page: int
-    def __init__(self, page: _Optional[int] = ...) -> None: ...
+class GetAllUsersRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
-class GetUsersResponse(_message.Message):
+class GetAllUsersResponse(_message.Message):
     __slots__ = ("code", "message", "users")
     CODE_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_FIELD_NUMBER: _ClassVar[int]
@@ -110,30 +112,34 @@ class SearchUsersResponse(_message.Message):
     def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ..., users: _Optional[_Iterable[_Union[UserData, _Mapping]]] = ..., total_pages: _Optional[int] = ...) -> None: ...
 
 class SendMessageRequest(_message.Message):
-    __slots__ = ("content", "recipient_id", "sender_id", "message_id")
+    __slots__ = ("content", "recipient_id", "sender_id", "message_id", "timestamp")
     CONTENT_FIELD_NUMBER: _ClassVar[int]
     RECIPIENT_ID_FIELD_NUMBER: _ClassVar[int]
     SENDER_ID_FIELD_NUMBER: _ClassVar[int]
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
+    TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
     content: str
     recipient_id: str
     sender_id: str
     message_id: str
-    def __init__(self, content: _Optional[str] = ..., recipient_id: _Optional[str] = ..., sender_id: _Optional[str] = ..., message_id: _Optional[str] = ...) -> None: ...
+    timestamp: str
+    def __init__(self, content: _Optional[str] = ..., recipient_id: _Optional[str] = ..., sender_id: _Optional[str] = ..., message_id: _Optional[str] = ..., timestamp: _Optional[str] = ...) -> None: ...
 
 class MessageData(_message.Message):
-    __slots__ = ("message_id", "sender_id", "recipient_id", "content", "timestamp")
+    __slots__ = ("message_id", "sender_id", "recipient_id", "content", "timestamp", "is_read")
     MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
     SENDER_ID_FIELD_NUMBER: _ClassVar[int]
     RECIPIENT_ID_FIELD_NUMBER: _ClassVar[int]
     CONTENT_FIELD_NUMBER: _ClassVar[int]
     TIMESTAMP_FIELD_NUMBER: _ClassVar[int]
+    IS_READ_FIELD_NUMBER: _ClassVar[int]
     message_id: str
     sender_id: str
     recipient_id: str
     content: str
     timestamp: str
-    def __init__(self, message_id: _Optional[str] = ..., sender_id: _Optional[str] = ..., recipient_id: _Optional[str] = ..., content: _Optional[str] = ..., timestamp: _Optional[str] = ...) -> None: ...
+    is_read: bool
+    def __init__(self, message_id: _Optional[str] = ..., sender_id: _Optional[str] = ..., recipient_id: _Optional[str] = ..., content: _Optional[str] = ..., timestamp: _Optional[str] = ..., is_read: bool = ...) -> None: ...
 
 class SendMessageResponse(_message.Message):
     __slots__ = ("code", "message", "data")
@@ -300,6 +306,20 @@ class GetUnreadMessagesResponse(_message.Message):
     message: str
     messages: _containers.RepeatedCompositeFieldContainer[UnreadMessage]
     def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[UnreadMessage, _Mapping]]] = ...) -> None: ...
+
+class GetAllMessagesRequest(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
+class GetAllMessagesResponse(_message.Message):
+    __slots__ = ("code", "message", "messages")
+    CODE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    MESSAGES_FIELD_NUMBER: _ClassVar[int]
+    code: int
+    message: str
+    messages: _containers.RepeatedCompositeFieldContainer[MessageData]
+    def __init__(self, code: _Optional[int] = ..., message: _Optional[str] = ..., messages: _Optional[_Iterable[_Union[MessageData, _Mapping]]] = ...) -> None: ...
 
 class ElectionRequest(_message.Message):
     __slots__ = ("server_id",)
