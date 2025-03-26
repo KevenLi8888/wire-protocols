@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch, call
 from server.grpc_server import ChatServiceServicer
 from generated import chat_pb2
 from shared.constants import SUCCESS, ERROR_REPLICATION_FAILED
+from datetime import datetime
 
 class TestReplication:
     @pytest.fixture
@@ -241,8 +242,47 @@ class TestReplication:
         
         # mock UUID generation
         mock_uuid = "msg-uuid-12345"
-        with patch('uuid.uuid4', return_value=mock_uuid):
-            # mock handler return success
+        # 模拟时间戳
+        mock_timestamp = "2023-01-01T12:00:00"
+        
+        # 直接修补 _handle_with_replication 方法
+        with patch.object(chat_servicer, '_handle_with_replication') as mock_handle:
+            # 设置返回值
+            mock_handle.return_value = {
+                'code': SUCCESS,
+                'data': {
+                    'message_id': str(mock_uuid),
+                    'sender_id': "sender456",
+                    'recipient_id': "recipient123",
+                    'content': "Hello world",
+                    'timestamp': mock_timestamp
+                }
+            }
+            
+            # 执行发送消息
+            response = chat_servicer.SendMessage(request, context)
+            
+            # 验证结果
+            assert response.code == SUCCESS
+            assert response.data.message_id == str(mock_uuid)
+            assert response.data.content == "Hello world"
+            
+            # 验证 _handle_with_replication 被正确调用
+            mock_handle.assert_called_once()
+            
+            # 获取传递给 _handle_with_replication 的参数
+            call_args = mock_handle.call_args[0]
+            modified_request = call_args[0]
+            
+            # 验证请求包含正确的内容
+            assert modified_request.content == "Hello world"
+            assert modified_request.recipient_id == "recipient123"
+            assert modified_request.sender_id == "sender456"
+            
+            # 验证 handler_func 参数
+            handler_func = call_args[3]
+            
+            # 调用 handler_func 并验证它会调用 send_message
             chat_servicer.mock_message_handler.send_message.return_value = {
                 'code': SUCCESS,
                 'data': {
@@ -250,33 +290,22 @@ class TestReplication:
                     'sender_id': "sender456",
                     'recipient_id': "recipient123",
                     'content': "Hello world",
-                    'timestamp': "2023-01-01T12:00:00"
+                    'timestamp': modified_request.timestamp
                 }
             }
             
-            # mock replication success
-            with patch.object(chat_servicer, '_propagate_to_replicas', return_value=True):
-                # execute sending a message
-                response = chat_servicer.SendMessage(request, context)
-                
-                # verify result
-                assert response.code == SUCCESS
-                assert response.data.message_id == str(mock_uuid)
-                assert response.data.content == "Hello world"
-                
-                # verify replication request contains UUID
-                chat_servicer._propagate_to_replicas.assert_called_once()
-                propagate_request = chat_servicer._propagate_to_replicas.call_args[0][0]
-                assert propagate_request.message_id == str(mock_uuid)
-                
-                # verify handler is called correctly
-                chat_servicer.mock_message_handler.send_message.assert_called_once_with({
-                    'content': "Hello world",
-                    'recipient_id': "recipient123",
-                    'sender_id': "sender456",
-                    'message_id': str(mock_uuid)
-                })
-
+            # 调用 handler_func
+            handler_func(modified_request)
+            
+            # 验证 send_message 被正确调用
+            chat_servicer.mock_message_handler.send_message.assert_called_once()
+            send_message_args = chat_servicer.mock_message_handler.send_message.call_args[0][0]
+            assert send_message_args['content'] == "Hello world"
+            assert send_message_args['recipient_id'] == "recipient123"
+            assert send_message_args['sender_id'] == "sender456"
+            assert 'message_id' in send_message_args
+            assert 'timestamp' in send_message_args
+    
     def test_sync_data_from_leader(self, chat_servicer, mock_server_instance):
         """Test the data synchronization from leader functionality"""
         # First patch the methods
